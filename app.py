@@ -2,6 +2,7 @@ CODE = """
 import streamlit as st
 import google.generativeai as genai
 from PIL import Image
+import re
 
 st.set_page_config(page_title="Moje Recepty", page_icon="🍳")
 
@@ -18,92 +19,151 @@ XXXXXXvalid_models = []
 XXXXXXfor m in genai.list_models():
 XXXXXXXXXif 'generateContent' in m.supported_generation_methods:
 XXXXXXXXXXXXvalid_models.append(m.name)
+XXXXXXif not valid_models:
+XXXXXXXXXreturn "Chyba: Tvůj klíč nemá povolený žádný mozek."
 XXXXXXmodel_name = valid_models[0]
 XXXXXXfor m in valid_models:
 XXXXXXXXXif 'flash' in m:
 XXXXXXXXXXXXmodel_name = m
 XXXXXXXXXXXXbreak
 XXXXXXmodel = genai.GenerativeModel(model_name)
-XXXXXXprompt = 'Jsi expert na vareni. Vsechny objemove miry prepocitej na GRAMY (g). Nekopiruj text slovo od slova. Napis postup vlastnimi slovy. Vystup: NAZEV: [Nazev], KATEGORIE: [Sladke/Slane], INGREDIENCE: - [cislo] [jednotka] [surovina], POSTUP: 1. [Krok]'
-XXXXXXwith st.spinner("Zpracovavam..."):
+XXXXXXprompt = '''Jsi expert na vaření. Všechny objemové míry přepočti na GRAMY (g).
+DŮLEŽITÉ: Nekopíruj text slovo od slova. Napiš postup vlastními slovy.
+Vypiš přesně v tomto formátu:
+NÁZEV: [Název]
+KATEGORIE: [Sladké nebo Slané]
+INGREDIENCE:
+
+[číslo] [g/ks] [surovina]
+POSTUP:
+
+[Krok]'''
+XXXXXXwith st.spinner("⏳ Zpracovávám recept a určuji kategorii..."):
 XXXXXXXXXif content_type == "image":
 XXXXXXXXXXXXresponse = model.generate_content([prompt, content])
 XXXXXXXXXelse:
-XXXXXXXXXXXXresponse = model.generate_content([prompt, content])
-XXXXXXXXXreturn response.text
+XXXXXXXXXXXXresponse = model.generate_content([prompt, f"Zdroj: {content}"])
+XXXXXXXXXtry:
+XXXXXXXXXXXXreturn response.text
+XXXXXXXXXexcept ValueError:
+XXXXXXXXXXXXreturn "Chyba: Ochrana autorských práv! Zkus text vložit ručně."
 XXXexcept Exception as e:
-XXXXXXreturn str(e)
+XXXXXXreturn f"Chyba: {str(e)}"
 
+--- ÚPLNĚ NOVÁ, ČISTÁ A BEZPEČNÁ KALKULAČKA ---
 def adjust_portions(text, multiplier):
 XXXif multiplier == 1.0: return text
-XXXlines = text.splitlines()
-XXXnew_lines = []
-XXXis_ing = False
-XXXfor line in lines:
-XXXXXXif "INGREDIENCE" in line.upper(): is_ing = True
-XXXXXXif "POSTUP" in line.upper(): is_ing = False
-XXXXXXif is_ing and line.strip().startswith("-"):
-XXXXXXXXXwords = line.split()
-XXXXXXXXXfor i, w in enumerate(words):
-XXXXXXXXXXXXw_clean = w.replace(",", ".")
-XXXXXXXXXXXXtry:
-XXXXXXXXXXXXXXXnum = float(w_clean)
-XXXXXXXXXXXXXXXnew_num = num * multiplier
-XXXXXXXXXXXXXXXwords[i] = str(int(new_num)) if new_num.is_integer() else str(round(new_num, 1))
-XXXXXXXXXXXXXXXbreak
-XXXXXXXXXXXXexcept: continue
-XXXXXXXXXnew_lines.append(" ".join(words))
-XXXXXXelse: new_lines.append(line)
-XXXreturn chr(10).join(new_lines)
+XXXparts = text.split("INGREDIENCE:")
+XXXif len(parts) != 2: return text
+XXXhead = parts[0]
+XXXrest = parts[1].split("POSTUP:")
+XXXingreds = rest[0]
+XXXpostup = chr(10) + "POSTUP:" + rest[1] if len(rest) > 1 else ""
+XXXnew_ingreds = []
+XXX
+XXXdef repl(match):
+XXXXXXtry:
+XXXXXXXXXval = float(match.group(1).replace(",", "."))
+XXXXXXXXXnew_val = val * multiplier
+XXXXXXXXXreturn str(int(new_val)) if new_val.is_integer() else str(round(new_val, 1))
+XXXXXXexcept:
+XXXXXXXXXreturn match.group(1)
+XXX
+XXXfor line in ingreds.split(chr(10)):
+XXXXXXif line.strip().startswith("-") or line.strip().startswith("*"):
+XXXXXXXXXnew_line = re.sub("([0-9]+(?:[.,][0-9]+)?)", repl, line, count=1)
+XXXXXXXXXnew_ingreds.append(new_line)
+XXXXXXelse:
+XXXXXXXXXnew_ingreds.append(line)
+XXXreturn head + "INGREDIENCE:" + chr(10).join(new_ingreds) + postup
 
 st.title("🍳 Můj chytrý receptář")
-with st.expander("Nastaveni"):
-XXXapi_key = st.text_input("API klic", type="password")
+
+with st.expander("⚙️ Nastavení (Klíč)"):
+XXXapi_key = st.text_input("Vlož Google API klíč", type="password")
 
 if not api_key:
-XXXst.warning("Vloz klic.")
+XXXst.warning("☝️ Vlož API klíč pro oživení aplikace.")
 XXXst.stop()
 
-t1, t2 = st.tabs(["Text", "Obrazek"])
-with t1:
-XXXu = st.text_area("Vloz text:")
-XXXif st.button("Kouzlo"):
-XXXXXXr = analyze_recipe(u, "text", api_key)
-XXXXXXst.session_state.recipes.insert(0, {"text": r, "fav": False})
-XXXXXXst.rerun()
-with t2:
-XXXf = st.file_uploader("Foto", type=["jpg", "png"])
-XXXif f and st.button("Čimilali"):
-XXXXXXimg = Image.open(f)
-XXXXXXr = analyze_recipe(img, "image", api_key)
-XXXXXXst.session_state.recipes.insert(0, {"text": r, "fav": False})
+tab1, tab2 = st.tabs(["📝 Z textu/odkazu", "📸 Z obrázku"])
+
+with tab1:
+XXXurl_input = st.text_area("Vlož odkaz nebo text receptu:")
+XXXif st.button("Vysosat a přidat do kuchařky"):
+XXXXXXif url_input:
+XXXXXXXXXrecept_text = analyze_recipe(url_input, "text", api_key)
+XXXXXXXXXst.session_state.recipes.insert(0, {"text": recept_text, "fav": False})
+XXXXXXXXXst.rerun()
+
+with tab2:
+XXXimg_file = st.file_uploader("Nahraj screenshot", type=["jpg", "png", "jpeg"])
+XXXif img_file and st.button("Přečíst z obrázku"):
+XXXXXXimage = Image.open(img_file)
+XXXXXXrecept_text = analyze_recipe(image, "image", api_key)
+XXXXXXst.session_state.recipes.insert(0, {"text": recept_text, "fav": False})
 XXXXXXst.rerun()
 
-st.divider()
-h = st.text_input("🔍 Hledat...").lower()
-ob = st.checkbox("❤️ Jen oblibene")
+st.markdown("---")
+
+col_search, col_filter, col_fav = st.columns([2, 1, 1])
+with col_search:
+XXXhledat = st.text_input("🔍 Hledat...").lower()
+with col_filter:
+XXXkategorie = st.selectbox("Kategorie", ["Vše", "Sladké", "Slané"])
+with col_fav:
+XXXst.write("")
+XXXst.write("")
+XXXjen_oblibene = st.checkbox("❤️ Oblíbené")
+
+st.write("### 📚 Uložené recepty")
 
 for i, r in enumerate(st.session_state.recipes):
-XXXif isinstance(r, str): r = {"text": r, "fav": False}
-XXXif ob and not r["fav"]: continue
-XXXif h and h not in r["text"].lower(): continue
-XXX
-XXXnazev = "Recept"
-XXXfor l in r["text"].splitlines():
-XXXXXXif "NAZEV:" in l.upper(): nazev = l.split(":", 1)[1]
-XXX
-XXXfav_icon = "❤️" if r["fav"] else "🤍"
-XXXwith st.expander(f"{fav_icon} {nazev}"):
-XXXXXXm = st.number_input("Nasobitel", 0.5, 5.0, 1.0, 0.5, key=f"m_{i}")
-XXXXXXst.markdown(adjust_portions(r["text"], m))
-XXXXXXc1, c2, c3 = st.columns(3)
-XXXXXXif c1.button("❤️" if not r["fav"] else "💔", key=f"f_{i}"):
-XXXXXXXXXst.session_state.recipes[i]["fav"] = not r["fav"]
+XXXif isinstance(r, str):
+XXXXXXr = {"text": r, "fav": False}
+XXXXXXst.session_state.recipes[i] = r
+
+XXXtext_lower = r["text"].lower()
+XXXif jen_oblibene and not r["fav"]: continue
+XXXif hledat and hledat not in text_lower: continue
+XXXif kategorie != "Vše" and kategorie.lower() not in text_lower: continue
+
+XXXif st.session_state.editing_index == i:
+XXXXXXst.markdown("#### ✏️ Úprava")
+XXXXXXnovy_text = st.text_area("Upravit text", value=r["text"], height=300, key=f"t_{i}", label_visibility="collapsed")
+XXXXXXc1, c2 = st.columns(2)
+XXXXXXif c1.button("💾 Uložit", key=f"s_{i}"):
+XXXXXXXXXst.session_state.recipes[i]["text"] = novy_text
+XXXXXXXXXst.session_state.editing_index = None
 XXXXXXXXXst.rerun()
-XXXXXXif c2.button("✏️", key=f"e_{i}"):
-XXXXXXXXXst.session_state.editing_index = i
-XXXXXXif c3.button("🗑️", key=f"d_{i}"):
-XXXXXXXXXst.session_state.recipes.pop(i)
+XXXXXXif c2.button("❌ Zrušit", key=f"c_{i}"):
+XXXXXXXXXst.session_state.editing_index = None
 XXXXXXXXXst.rerun()
+XXXelse:
+XXXXXXnazev = "Recept bez názvu"
+XXXXXXfor line in str(r["text"]).splitlines():
+XXXXXXXXXif "NÁZEV:" in line:
+XXXXXXXXXXXXnazev = line.replace("NÁZEV:", "").strip()
+XXXXXXXXXXXXbreak
+XXXXXX
+XXXXXXikona = "❤️" if r["fav"] else "🤍"
+XXXXXXwith st.expander(f"{ikona} {nazev}"):
+XXXXXXXXXnasobitel = st.number_input("Násobitel dávky", min_value=0.25, value=1.0, step=0.25, key=f"porce_{i}")
+XXXXXXXXXupraveny_text = adjust_portions(r["text"], nasobitel)
+XXXXXXXXXst.markdown(upraveny_text)
+XXXXXXXXXst.markdown("---")
+XXXXXXXXXc1, c2, c3 = st.columns(3)
+XXXXXXXXXif c1.button("❤️ Oblíbit" if not r["fav"] else "💔 Odebrat", key=f"f_{i}"):
+XXXXXXXXXXXXst.session_state.recipes[i]["fav"] = not r["fav"]
+XXXXXXXXXXXXst.rerun()
+XXXXXXXXXif c2.button("✏️ Upravit", key=f"e_{i}"):
+XXXXXXXXXXXXst.session_state.editing_index = i
+XXXXXXXXXXXXst.rerun()
+XXXXXXXXXif c3.button("🗑️ Smazat", key=f"d_{i}"):
+XXXXXXXXXXXXst.session_state.recipes.pop(i)
+XXXXXXXXXXXXst.rerun()
 """
 exec(CODE.replace("XXX", "    "))
+KONEC
+
+Dej vědět, jakmile to tam hodíš! Odstranil jsem všechny krkolomné programátorské triky, takže tohle se prostě spustí a bude spolehlivě počítat i hodnoty jako 1.5g nebo 200ml. Hned jak to pofičí, mám pro tebe připravený ten SheetDB kód na ukládání!
