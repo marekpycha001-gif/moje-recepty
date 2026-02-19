@@ -67,13 +67,13 @@ XXXst.stop()
 t1, t2 = st.tabs(["Text", "Obrazek"])
 with t1:
 XXXu = st.text_area("Vloz text:")
-XXXif st.button("Pridat text"):
+XXXif st.button("Čimilali"):
 XXXXXXr = analyze_recipe(u, "text", api_key)
 XXXXXXst.session_state.recipes.insert(0, {"text": r, "fav": False})
 XXXXXXst.rerun()
 with t2:
 XXXf = st.file_uploader("Foto", type=["jpg", "png"])
-XXXif f and st.button("Pridat foto"):
+XXXif f and st.button("Čimilali"):
 XXXXXXimg = Image.open(f)
 XXXXXXr = analyze_recipe(img, "image", api_key)
 XXXXXXst.session_state.recipes.insert(0, {"text": r, "fav": False})
