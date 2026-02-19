@@ -49,30 +49,55 @@ XXXXXXXXXXXXreturn "Chyba: Ochrana autorských práv! Zkus text vložit ručně.
 XXXexcept Exception as e:
 XXXXXXreturn f"Chyba: {str(e)}"
 
+--- OPRAVENÁ A CHYTŘEJŠÍ KALKULAČKA ---
 def adjust_portions(text, multiplier):
 XXXif multiplier == 1.0: return text
-XXXparts = text.split("INGREDIENCE:")
-XXXif len(parts) != 2: return text
-XXXhead = parts[0]
-XXXrest = parts[1].split("POSTUP:")
-XXXingreds = rest[0]
-XXXpostup = chr(10) + "POSTUP:" + rest[1] if len(rest) > 1 else ""
-XXXnew_ingreds = []
-XXXfor line in ingreds.splitlines():
-XXXXXXif line.strip().startswith('-'):
-XXXXXXXXXwords = line.split()
-XXXXXXXXXfor j, w in enumerate(words):
+XXXlines = text.split(chr(10))
+XXXin_ingredients = False
+XXXnew_lines = []
+XXXfor line in lines:
+XXXXXXupper_line = line.upper()
+XXXXXXif "INGREDIENCE" in upper_line:
+XXXXXXXXXin_ingredients = True
+XXXXXXXXXnew_lines.append(line)
+XXXXXXXXXcontinue
+XXXXXXif "POSTUP" in upper_line:
+XXXXXXXXXin_ingredients = False
+XXXXXXXXXnew_lines.append(line)
+XXXXXXXXXcontinue
+XXXXXX
+XXXXXXif in_ingredients and (line.strip().startswith("-") or line.strip().startswith("*")):
+XXXXXXXXXnew_char_list = []
+XXXXXXXXXnum_str = ""
+XXXXXXXXXfound_num = False
+XXXXXXXXXfor c in line:
+XXXXXXXXXXXXif not found_num and (c.isdigit() or (c in ".," and num_str)):
+XXXXXXXXXXXXXXXnum_str += c
+XXXXXXXXXXXXelif num_str:
+XXXXXXXXXXXXXXXfound_num = True
+XXXXXXXXXXXXXXXtry:
+XXXXXXXXXXXXXXXXXXval = float(num_str.replace(",", "."))
+XXXXXXXXXXXXXXXXXXnew_val = val * multiplier
+XXXXXXXXXXXXXXXXXXform_val = str(int(new_val)) if new_val.is_integer() else str(round(new_val, 1))
+XXXXXXXXXXXXXXXXXXnew_char_list.append(form_val)
+XXXXXXXXXXXXXXXexcept ValueError:
+XXXXXXXXXXXXXXXXXXnew_char_list.append(num_str)
+XXXXXXXXXXXXXXXnew_char_list.append(c)
+XXXXXXXXXXXXXXXnum_str = ""
+XXXXXXXXXXXXelse:
+XXXXXXXXXXXXXXXnew_char_list.append(c)
+XXXXXXXXXif num_str:
 XXXXXXXXXXXXtry:
-XXXXXXXXXXXXXXXval = float(w)
+XXXXXXXXXXXXXXXval = float(num_str.replace(",", "."))
 XXXXXXXXXXXXXXXnew_val = val * multiplier
-XXXXXXXXXXXXXXXwords[j] = str(int(new_val)) if new_val.is_integer() else str(round(new_val, 1))
-XXXXXXXXXXXXXXXbreak
+XXXXXXXXXXXXXXXform_val = str(int(new_val)) if new_val.is_integer() else str(round(new_val, 1))
+XXXXXXXXXXXXXXXnew_char_list.append(form_val)
 XXXXXXXXXXXXexcept ValueError:
-XXXXXXXXXXXXXXXpass
-XXXXXXXXXnew_ingreds.append(" ".join(words))
+XXXXXXXXXXXXXXXnew_char_list.append(num_str)
+XXXXXXXXXnew_lines.append("".join(new_char_list))
 XXXXXXelse:
-XXXXXXXXXnew_ingreds.append(line)
-XXXreturn head + "INGREDIENCE:" + chr(10).join(new_ingreds) + postup
+XXXXXXXXXnew_lines.append(line)
+XXXreturn chr(10).join(new_lines)
 
 st.title("🍳 Můj chytrý receptář")
 
