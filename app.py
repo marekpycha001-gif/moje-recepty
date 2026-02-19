@@ -14,6 +14,24 @@ XXXst.session_state.editing_index = None
 def analyze_recipe(content, content_type, api_key):
 XXXtry:
 XXXXXXgenai.configure(api_key=api_key)
+XXXXXX
+XXXXXX# AUTODETEKCE: Aplikace se sama zeptá Googlu, jaké modely fungují
+XXXXXXvalid_models = []
+XXXXXXfor m in genai.list_models():
+XXXXXXXXXif 'generateContent' in m.supported_generation_methods:
+XXXXXXXXXXXXvalid_models.append(m.name)
+XXXXXX
+XXXXXXif not valid_models:
+XXXXXXXXXreturn "Chyba: Tvůj klíč nemá povolený žádný mozek. Musíš vygenerovat nový klíč na Google AI Studio."
+XXXXXX
+XXXXXX# Vybere ten nejlepší dostupný (preferuje model flash, jinak vezme první funkční)
+XXXXXXmodel_name = valid_models[0]
+XXXXXXfor m in valid_models:
+XXXXXXXXXif 'flash' in m:
+XXXXXXXXXXXXmodel_name = m
+XXXXXXXXXXXXbreak
+XXXXXX
+XXXXXXmodel = genai.GenerativeModel(model_name)
 XXXXXXprompt = '''Jsi expert na vaření. Všechny objemové míry přepočti na GRAMY (g) a zohledni hustotu surovin (olej/med atd.). Kusy nech na kusy.
 Vypiš přesně v tomto formátu:
 NÁZEV: [Název]
@@ -24,22 +42,11 @@ INGREDIENCE:
 POSTUP:
 
 [Krok]'''
-XXXXXXwith st.spinner("⏳ Počítám gramy a píšu recept..."):
-XXXXXXXXXtry:
-XXXXXXXXXXXX# Nejprve zkusíme nový model
-XXXXXXXXXXXXmodel = genai.GenerativeModel('gemini-1.5-flash')
-XXXXXXXXXXXXif content_type == "image":
-XXXXXXXXXXXXXXXresponse = model.generate_content([prompt, content])
-XXXXXXXXXXXXelse:
-XXXXXXXXXXXXXXXresponse = model.generate_content([prompt, f"Zdroj: {content}"])
-XXXXXXXXXexcept Exception:
-XXXXXXXXXXXX# ZÁCHRANNÁ BRZDA: Pokud nový model není dostupný, použijeme starší, který funguje všude
-XXXXXXXXXXXXif content_type == "image":
-XXXXXXXXXXXXXXXmodel = genai.GenerativeModel('gemini-pro-vision')
-XXXXXXXXXXXXXXXresponse = model.generate_content([prompt, content])
-XXXXXXXXXXXXelse:
-XXXXXXXXXXXXXXXmodel = genai.GenerativeModel('gemini-pro')
-XXXXXXXXXXXXXXXresponse = model.generate_content([prompt, f"Zdroj: {content}"])
+XXXXXXwith st.spinner(f"⏳ Počítám gramy (používám {model_name})..."):
+XXXXXXXXXif content_type == "image":
+XXXXXXXXXXXXresponse = model.generate_content([prompt, content])
+XXXXXXXXXelse:
+XXXXXXXXXXXXresponse = model.generate_content([prompt, f"Zdroj: {content}"])
 XXXXXXreturn response.text
 XXXexcept Exception as e:
 XXXXXXreturn f"Chyba: {str(e)}"
