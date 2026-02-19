@@ -14,17 +14,13 @@ XXXst.session_state.editing_index = None
 def analyze_recipe(content, content_type, api_key):
 XXXtry:
 XXXXXXgenai.configure(api_key=api_key)
-XXXXXX
-XXXXXX# AUTODETEKCE: Aplikace se sama zeptá Googlu, jaké modely fungují
 XXXXXXvalid_models = []
 XXXXXXfor m in genai.list_models():
 XXXXXXXXXif 'generateContent' in m.supported_generation_methods:
 XXXXXXXXXXXXvalid_models.append(m.name)
-XXXXXX
 XXXXXXif not valid_models:
-XXXXXXXXXreturn "Chyba: Tvůj klíč nemá povolený žádný mozek. Musíš vygenerovat nový klíč na Google AI Studio."
+XXXXXXXXXreturn "Chyba: Tvůj klíč nemá povolený žádný mozek."
 XXXXXX
-XXXXXX# Vybere ten nejlepší dostupný (preferuje model flash, jinak vezme první funkční)
 XXXXXXmodel_name = valid_models[0]
 XXXXXXfor m in valid_models:
 XXXXXXXXXif 'flash' in m:
@@ -32,7 +28,10 @@ XXXXXXXXXXXXmodel_name = m
 XXXXXXXXXXXXbreak
 XXXXXX
 XXXXXXmodel = genai.GenerativeModel(model_name)
-XXXXXXprompt = '''Jsi expert na vaření. Všechny objemové míry přepočti na GRAMY (g) a zohledni hustotu surovin (olej/med atd.). Kusy nech na kusy.
+XXXXXX
+XXXXXX# UPRAVENÝ ROZKAZ: Zákaz kopírování, nutnost přepsat vlastními slovy
+XXXXXXprompt = '''Jsi expert na vaření. Všechny objemové míry přepočti na GRAMY (g) a zohledni hustotu surovin. Kusy nech na kusy.
+DŮLEŽITÉ: Nekopíruj původní text slovo od slova! Napiš postup svými vlastními slovy jako úplně nový originální text, abys neporušil autorská práva.
 Vypiš přesně v tomto formátu:
 NÁZEV: [Název]
 KATEGORIE: [Sladké/Slané]
@@ -42,12 +41,21 @@ INGREDIENCE:
 POSTUP:
 
 [Krok]'''
+XXXXXX
 XXXXXXwith st.spinner(f"⏳ Počítám gramy (používám {model_name})..."):
 XXXXXXXXXif content_type == "image":
 XXXXXXXXXXXXresponse = model.generate_content([prompt, content])
 XXXXXXXXXelse:
 XXXXXXXXXXXXresponse = model.generate_content([prompt, f"Zdroj: {content}"])
-XXXXXXreturn response.text
+XXXXXXXXX
+XXXXXXXXX# Ochrana proti pádu aplikace kvůli autorským právům
+XXXXXXXXXtry:
+XXXXXXXXXXXXreturn response.text
+XXXXXXXXXexcept ValueError:
+XXXXXXXXXXXXif response.candidates and response.candidates[0].finish_reason == 4:
+XXXXXXXXXXXXXXXreturn "Chyba z obrázku: Ochrana autorských práv! AI odmítla text přečíst, protože je chráněný. Vlož ho raději jako text."
+XXXXXXXXXXXXelse:
+XXXXXXXXXXXXXXXreturn "Chyba AI: Odpověď byla zablokována z bezpečnostních důvodů."
 XXXexcept Exception as e:
 XXXXXXreturn f"Chyba: {str(e)}"
 
