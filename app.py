@@ -62,18 +62,18 @@ XXXapi_key = st.text_input("API klic", type="password")
 
 if not api_key:
 XXXst.warning("Vloz klic.")
-XXXst.stop()
+XXXstop()
 
 t1, t2 = st.tabs(["Text", "Obrazek"])
 with t1:
 XXXu = st.text_area("Vloz text:")
-XXXif st.button("Čimilali"):
+XXXif st.button("Čimilali", key="b1"):
 XXXXXXr = analyze_recipe(u, "text", api_key)
 XXXXXXst.session_state.recipes.insert(0, {"text": r, "fav": False})
 XXXXXXst.rerun()
 with t2:
 XXXf = st.file_uploader("Foto", type=["jpg", "png"])
-XXXif f and st.button("Čimilali"):
+XXXif f and st.button("Čimilali", key="b2"):
 XXXXXXimg = Image.open(f)
 XXXXXXr = analyze_recipe(img, "image", api_key)
 XXXXXXst.session_state.recipes.insert(0, {"text": r, "fav": False})
