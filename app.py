@@ -2,6 +2,7 @@ CODE = """
 import streamlit as st
 import google.generativeai as genai
 from PIL import Image
+import re
 
 st.set_page_config(page_title="Moje Recepty", page_icon="🍳")
 
@@ -49,55 +50,32 @@ XXXXXXXXXXXXreturn "Chyba: Ochrana autorských práv! Zkus text vložit ručně.
 XXXexcept Exception as e:
 XXXXXXreturn f"Chyba: {str(e)}"
 
---- OPRAVENÁ A CHYTŘEJŠÍ KALKULAČKA ---
+--- ÚPLNĚ NOVÁ, ČISTÁ A BEZPEČNÁ KALKULAČKA ---
 def adjust_portions(text, multiplier):
 XXXif multiplier == 1.0: return text
-XXXlines = text.split(chr(10))
-XXXin_ingredients = False
-XXXnew_lines = []
-XXXfor line in lines:
-XXXXXXupper_line = line.upper()
-XXXXXXif "INGREDIENCE" in upper_line:
-XXXXXXXXXin_ingredients = True
-XXXXXXXXXnew_lines.append(line)
-XXXXXXXXXcontinue
-XXXXXXif "POSTUP" in upper_line:
-XXXXXXXXXin_ingredients = False
-XXXXXXXXXnew_lines.append(line)
-XXXXXXXXXcontinue
-XXXXXX
-XXXXXXif in_ingredients and (line.strip().startswith("-") or line.strip().startswith("*")):
-XXXXXXXXXnew_char_list = []
-XXXXXXXXXnum_str = ""
-XXXXXXXXXfound_num = False
-XXXXXXXXXfor c in line:
-XXXXXXXXXXXXif not found_num and (c.isdigit() or (c in ".," and num_str)):
-XXXXXXXXXXXXXXXnum_str += c
-XXXXXXXXXXXXelif num_str:
-XXXXXXXXXXXXXXXfound_num = True
-XXXXXXXXXXXXXXXtry:
-XXXXXXXXXXXXXXXXXXval = float(num_str.replace(",", "."))
-XXXXXXXXXXXXXXXXXXnew_val = val * multiplier
-XXXXXXXXXXXXXXXXXXform_val = str(int(new_val)) if new_val.is_integer() else str(round(new_val, 1))
-XXXXXXXXXXXXXXXXXXnew_char_list.append(form_val)
-XXXXXXXXXXXXXXXexcept ValueError:
-XXXXXXXXXXXXXXXXXXnew_char_list.append(num_str)
-XXXXXXXXXXXXXXXnew_char_list.append(c)
-XXXXXXXXXXXXXXXnum_str = ""
-XXXXXXXXXXXXelse:
-XXXXXXXXXXXXXXXnew_char_list.append(c)
-XXXXXXXXXif num_str:
-XXXXXXXXXXXXtry:
-XXXXXXXXXXXXXXXval = float(num_str.replace(",", "."))
-XXXXXXXXXXXXXXXnew_val = val * multiplier
-XXXXXXXXXXXXXXXform_val = str(int(new_val)) if new_val.is_integer() else str(round(new_val, 1))
-XXXXXXXXXXXXXXXnew_char_list.append(form_val)
-XXXXXXXXXXXXexcept ValueError:
-XXXXXXXXXXXXXXXnew_char_list.append(num_str)
-XXXXXXXXXnew_lines.append("".join(new_char_list))
+XXXparts = text.split("INGREDIENCE:")
+XXXif len(parts) != 2: return text
+XXXhead = parts[0]
+XXXrest = parts[1].split("POSTUP:")
+XXXingreds = rest[0]
+XXXpostup = chr(10) + "POSTUP:" + rest[1] if len(rest) > 1 else ""
+XXXnew_ingreds = []
+XXX
+XXXdef repl(match):
+XXXXXXtry:
+XXXXXXXXXval = float(match.group(1).replace(",", "."))
+XXXXXXXXXnew_val = val * multiplier
+XXXXXXXXXreturn str(int(new_val)) if new_val.is_integer() else str(round(new_val, 1))
+XXXXXXexcept:
+XXXXXXXXXreturn match.group(1)
+XXX
+XXXfor line in ingreds.split(chr(10)):
+XXXXXXif line.strip().startswith("-") or line.strip().startswith("*"):
+XXXXXXXXXnew_line = re.sub("([0-9]+(?:[.,][0-9]+)?)", repl, line, count=1)
+XXXXXXXXXnew_ingreds.append(new_line)
 XXXXXXelse:
-XXXXXXXXXnew_lines.append(line)
-XXXreturn chr(10).join(new_lines)
+XXXXXXXXXnew_ingreds.append(line)
+XXXreturn head + "INGREDIENCE:" + chr(10).join(new_ingreds) + postup
 
 st.title("🍳 Můj chytrý receptář")
 
@@ -185,4 +163,4 @@ XXXXXXXXXif c3.button("🗑️ Smazat", key=f"d_{i}"):
 XXXXXXXXXXXXst.session_state.recipes.pop(i)
 XXXXXXXXXXXXst.rerun()
 """
-exec(CODE.replace("XXX", "    ").replace("\xa0", " "))
+exec(CODE.replace("XXX", "    "))
