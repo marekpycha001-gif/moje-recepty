@@ -11,7 +11,9 @@ SDB_URL = ""
 if 'recipes' not in st.session_state:
 XXXtry:
 XXXXXXr = requests.get(SDB_URL, timeout=5)
-XXXXXXst.session_state.recipes = [{"text": x.get("text", ""), "fav": str(x.get("fav", "")).lower() == "true"} for x in r.json()]
+XXXXXXif r.status_code == 200:
+XXXXXXXXXst.session_state.recipes = [{"text": x.get("text", ""), "fav": str(x.get("fav", "")).lower() == "true"} for x in r.json()]
+XXXXXXelse: st.session_state.recipes = []
 XXXexcept: st.session_state.recipes = []
 
 if 'editing_index' not in st.session_state:
@@ -28,31 +30,14 @@ XXXexcept: pass
 def analyze(content, api_key):
 XXXtry:
 XXXXXXgenai.configure(api_key=api_key)
-XXXXXXmodel = genai.GenerativeModel("gemini-1.5-flash")
-XXXXXXprompt = "Jsi expert na vareni. Vsechny miry dej na gramy (g). Napis vlastnimi slovy. Format: NAZEV: [Nazev], INGREDIENCE: - [cislo] [jednotka] [surovina], POSTUP: 1. [Krok]"
+XXXXXXmodels = [m.name for m in genai.list_models() if "generateContent" in m.supported_generation_methods]
+XXXXXXm_name = next((m for m in models if "flash" in m), models[0])
+XXXXXXmodel = genai.GenerativeModel(m_name)
+XXXXXXp = "Jsi expert na vareni. Vsechny miry dej na gramy (g). Napis vlastnimi slovy. Format: NAZEV: [Nazev], INGREDIENCE: - [cislo] [jednotka] [surovina], POSTUP: 1. [Krok]"
 XXXXXXwith st.spinner("Čimilali maka..."):
-XXXXXXXXXres = model.generate_content([prompt, content])
+XXXXXXXXXres = model.generate_content([p, content])
 XXXXXXXXXreturn res.text
 XXXexcept Exception as e: return str(e)
-
-def calc(text, m):
-XXXif m == 1.0: return text
-XXXlines = text.splitlines()
-XXXnew, is_ing = [], False
-XXXfor l in lines:
-XXXXXXif "INGREDIENCE" in l.upper(): is_ing = True
-XXXXXXif "POSTUP" in l.upper(): is_ing = False
-XXXXXXif is_ing and l.strip().startswith("-"):
-XXXXXXXXXw = l.split()
-XXXXXXXXXfor i, word in enumerate(w):
-XXXXXXXXXXXXtry:
-XXXXXXXXXXXXXXXv = float(word.replace(",", ".")) * m
-XXXXXXXXXXXXXXXw[i] = str(int(v)) if v.is_integer() else str(round(v, 1))
-XXXXXXXXXXXXXXXbreak
-XXXXXXXXXXXXexcept: continue
-XXXXXXXXXnew.append(" ".join(w))
-XXXXXXelse: new.append(l)
-XXXreturn chr(10).join(new_lines)
 
 st.title("🍳 Můj chytrý receptář")
 api = st.sidebar.text_input("API klic", type="password")
@@ -89,8 +74,8 @@ XXXelse:
 XXXXXXn = "Recept"
 XXXXXXfor l in r["text"].splitlines():
 XXXXXXXXXif "NAZEV:" in l.upper(): n = l.split(":", 1)[1]
-XXXXXXwith st.expander(f"{'❤️' if r.get('fav') else '🤍'} {n}"):
-XXXXXXXXXm = st.number_input("Porce", 0.5, 5.0, 1.0, 0.5, key=f"m_{i}")
+XXXXXXfav_i = "❤️" if r.get("fav") else "🤍"
+XXXXXXwith st.expander(f"{fav_i} {n}"):
 XXXXXXXXXst.markdown(r["text"])
 XXXXXXXXXc1, c2, c3 = st.columns(3)
 XXXXXXXXXif c1.button("❤️", key=f"f_{i}"):
