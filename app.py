@@ -11,10 +11,10 @@ SDB_URL = ""
 
 if 'recipes' not in st.session_state:
 XXXtry:
-XXXXXXres = requests.get(SDB_URL)
+XXXXXXres = requests.get(SDB_URL, timeout=10)
 XXXXXXif res.status_code == 200:
 XXXXXXXXXdata = res.json()
-XXXXXXXXXst.session_state.recipes = [{"text": r["text"], "fav": str(r["fav"]).lower() == "true"} for r in data]
+XXXXXXXXXst.session_state.recipes = [{"text": r.get("text", ""), "fav": str(r.get("fav", "")).lower() == "true"} for r in data]
 XXXXXXelse: st.session_state.recipes = []
 XXXexcept: st.session_state.recipes = []
 
@@ -25,19 +25,21 @@ def save_to_db():
 XXXtry:
 XXXXXXrequests.delete(SDB_URL + "/all")
 XXXXXXif st.session_state.recipes:
-XXXXXXXXXdf = pd.DataFrame(st.session_state.recipes)
-XXXXXXXXXrequests.post(SDB_URL, json={"data": df.to_dict(orient='records')})
-XXXexcept: pass
+XXXXXXXXXdata_to_send = []
+XXXXXXXXXfor r in st.session_state.recipes:
+XXXXXXXXXXXXdata_to_send.append({"text": str(r["text"]), "fav": str(r["fav"]).lower()})
+XXXXXXXXXrequests.post(SDB_URL, json={"data": data_to_send}, timeout=10)
+XXXexcept Exception as e:
+XXXXXXst.error(f"Chyba ukladani: {e}")
 
 def analyze_recipe(content, content_type, api_key):
 XXXtry:
 XXXXXXgenai.configure(api_key=api_key)
 XXXXXXvalid_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-XXXXXXif not valid_models: return "Chyba: Zadny model neni dostupny."
 XXXXXXmodel_name = next((m for m in valid_models if "flash" in m), valid_models[0])
 XXXXXXmodel = genai.GenerativeModel(model_name)
-XXXXXXprompt = 'Jsi expert na vareni. Vsechny objemove miry prepocitej na GRAMY (g). Nekopiruj text slovo od slova. Napis postup vlastnimi slovy. Vystup: NAZEV: [Nazev], KATEGORIE: [Sladke/Slane], INGREDIENCE: - [cislo] [jednotka] [surovina], POSTUP: 1. [Krok]'
-XXXXXXwith st.spinner(f"Cimilali maka..."):
+XXXXXXprompt = 'Jsi expert na vareni. Vsechny objemove miry prepocitej na GRAMY (g). Vystup: NAZEV: [Nazev], INGREDIENCE: - [cislo] [jednotka] [surovina], POSTUP: 1. [Krok]'
+XXXXXXwith st.spinner("Čimilali maká..."):
 XXXXXXXXXresponse = model.generate_content([prompt, content])
 XXXXXXXXXreturn response.text
 XXXexcept Exception as e: return str(e)
@@ -73,16 +75,15 @@ t1, t2 = st.tabs(["Text", "Obrazek"])
 with t1:
 XXXu = st.text_area("Vloz text:")
 XXXif st.button("Čimilali", key="b1"):
-XXXXXXif u:
-XXXXXXXXXr = analyze_recipe(u, "text", api_key)
-XXXXXXXXXst.session_state.recipes.insert(0, {"text": r, "fav": False})
-XXXXXXXXXsave_to_db()
-XXXXXXXXXst.rerun()
+XXXXXXr_text = analyze_recipe(u, "text", api_key)
+XXXXXXst.session_state.recipes.insert(0, {"text": r_text, "fav": False})
+XXXXXXsave_to_db()
+XXXXXXst.rerun()
 with t2:
 XXXf = st.file_uploader("Foto", type=["jpg", "png"])
 XXXif f and st.button("Čimilali", key="b2"):
-XXXXXXr = analyze_recipe(Image.open(f), "image", api_key)
-XXXXXXst.session_state.recipes.insert(0, {"text": r, "fav": False})
+XXXXXXr_text = analyze_recipe(Image.open(f), "image", api_key)
+XXXXXXst.session_state.recipes.insert(0, {"text": r_text, "fav": False})
 XXXXXXsave_to_db()
 XXXXXXst.rerun()
 
@@ -91,7 +92,7 @@ h = st.text_input("🔍 Hledat...").lower()
 ob = st.checkbox("❤️ Jen oblibene")
 
 for i, r in enumerate(st.session_state.recipes):
-XXXif ob and not r["fav"]: continue
+XXXif ob and not r.get("fav"): continue
 XXXif h and h not in r["text"].lower(): continue
 XXXif st.session_state.editing_index == i:
 XXXXXXnt = st.text_area("Upravit", r["text"], height=300, key=f"e_{i}")
@@ -109,7 +110,7 @@ XXXXXXXXXm = st.number_input("Nasobitel", 0.5, 5.0, 1.0, 0.5, key=f"m_{i}")
 XXXXXXXXXst.markdown(adjust_portions(r["text"], m))
 XXXXXXXXXc1, c2, c3 = st.columns(3)
 XXXXXXXXXif c1.button("❤️/💔", key=f"f_{i}"):
-XXXXXXXXXXXXst.session_state.recipes[i]["fav"] = not r["fav"]
+XXXXXXXXXXXXst.session_state.recipes[i]["fav"] = not r.get("fav")
 XXXXXXXXXXXXsave_to_db()
 XXXXXXXXXXXXst.rerun()
 XXXXXXXXXif c2.button("✏️", key=f"ed_{i}"):
