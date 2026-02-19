@@ -73,7 +73,7 @@ XXXXXXst.session_state.recipes.insert(0, {"text": r, "fav": False})
 XXXXXXst.rerun()
 with t2:
 XXXf = st.file_uploader("Foto", type=["jpg", "png"])
-XXXif f and st.button("Pridat foto"):
+XXXif f and st.button("Čimilali"):
 XXXXXXimg = Image.open(f)
 XXXXXXr = analyze_recipe(img, "image", api_key)
 XXXXXXst.session_state.recipes.insert(0, {"text": r, "fav": False})
