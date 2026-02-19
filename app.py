@@ -6,6 +6,7 @@ import requests
 
 st.set_page_config(page_title="Moje Recepty", page_icon="🍳")
 
+TVŮJ NOVÝ ODKAZ:
 SDB_URL = ""
 
 if "recipes" not in st.session_state:
@@ -21,11 +22,13 @@ XXXst.session_state.editing_index = None
 
 def db_save():
 XXXtry:
+XXXXXX# Nejdřív smažeme všechno v tabulce (tím zmizí i to "ahoj")
 XXXXXXrequests.delete(SDB_URL + "/all")
 XXXXXXif st.session_state.recipes:
 XXXXXXXXXdata = [{"text": r["text"], "fav": str(r["fav"]).lower()} for r in st.session_state.recipes]
 XXXXXXXXXrequests.post(SDB_URL, json={"data": data})
-XXXexcept: pass
+XXXexcept Exception as e:
+XXXXXXst.error(f"Chyba spojení s tabulkou: {e}")
 
 def analyze(content, api_key):
 XXXtry:
@@ -34,7 +37,7 @@ XXXXXXmodels = [m.name for m in genai.list_models() if "generateContent" in m.su
 XXXXXXm_name = next((m for m in models if "flash" in m), models[0])
 XXXXXXmodel = genai.GenerativeModel(m_name)
 XXXXXXp = "Jsi expert na vareni. Vsechny miry dej na gramy (g). Format: NAZEV: [Nazev], INGREDIENCE: - [cislo] [jednotka] [surovina], POSTUP: 1. [Krok]"
-XXXXXXwith st.spinner("Čimilali maka..."):
+XXXXXXwith st.spinner("Čimilali maká..."):
 XXXXXXXXXres = model.generate_content([p, content])
 XXXXXXXXXreturn res.text
 XXXexcept Exception as e: return str(e)
@@ -50,18 +53,25 @@ XXXXXXXXXu = st.text_area("Vlož text:")
 XXXXXXXXXif st.form_submit_button("Čimilali"):
 XXXXXXXXXXXXif u:
 XXXXXXXXXXXXXXXr_t = analyze(u, api)
-XXXXXXXXXXXXXXXst.session_state.recipes.insert(0, {"text": r_t, "fav": False})
-XXXXXXXXXXXXXXXdb_save()
-XXXXXXXXXXXXXXXst.rerun()
+XXXXXXXXXXXXXXX# Pokud AI vrátí chybu o limitu, recept se nepřidá
+XXXXXXXXXXXXXXXif "quota" not in r_t.lower():
+XXXXXXXXXXXXXXXXXXst.session_state.recipes.insert(0, {"text": r_t, "fav": False})
+XXXXXXXXXXXXXXXXXXdb_save()
+XXXXXXXXXXXXXXXXXXst.rerun()
+XXXXXXXXXXXXXXXelse:
+XXXXXXXXXXXXXXXXXXst.error(r_t)
 XXXwith t2:
 XXXXXXf = st.file_uploader("Foto", type=["jpg", "png"])
 XXXXXXif f and st.button("Čimilali", key="c2"):
 XXXXXXXXXr_t = analyze(Image.open(f), api)
-XXXXXXXXXst.session_state.recipes.insert(0, {"text": r_t, "fav": False})
-XXXXXXXXXdb_save()
-XXXXXXXXXst.rerun()
+XXXXXXXXXif "quota" not in r_t.lower():
+XXXXXXXXXXXXst.session_state.recipes.insert(0, {"text": r_t, "fav": False})
+XXXXXXXXXXXXdb_save()
+XXXXXXXXXXXXst.rerun()
+XXXXXXXXXelse:
+XXXXXXXXXXXXst.error(r_t)
 else:
-XXXst.info("Vlož klíč vlevo.")
+XXXst.info("Vlož Google API klíč vlevo v menu.")
 
 for i, r in enumerate(st.session_state.recipes):
 XXXif st.session_state.editing_index == i:
