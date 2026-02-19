@@ -2,7 +2,6 @@ CODE = """
 import streamlit as st
 import google.generativeai as genai
 from PIL import Image
-import re
 
 st.set_page_config(page_title="Moje Recepty", page_icon="🍳")
 
@@ -38,7 +37,7 @@ INGREDIENCE:
 POSTUP:
 
 [Krok]'''
-XXXXXXwith st.spinner(f"⏳ Zpracovávám recept a určuji kategorii..."):
+XXXXXXwith st.spinner("⏳ Zpracovávám recept a určuji kategorii..."):
 XXXXXXXXXif content_type == "image":
 XXXXXXXXXXXXresponse = model.generate_content([prompt, content])
 XXXXXXXXXelse:
@@ -50,7 +49,6 @@ XXXXXXXXXXXXreturn "Chyba: Ochrana autorských práv! Zkus text vložit ručně.
 XXXexcept Exception as e:
 XXXXXXreturn f"Chyba: {str(e)}"
 
---- FUNKCE PRO PŘEPOČET PORCÍ ---
 def adjust_portions(text, multiplier):
 XXXif multiplier == 1.0: return text
 XXXparts = text.split("INGREDIENCE:")
@@ -58,18 +56,23 @@ XXXif len(parts) != 2: return text
 XXXhead = parts[0]
 XXXrest = parts[1].split("POSTUP:")
 XXXingreds = rest[0]
-XXXpostup = "\nPOSTUP:" + rest[1] if len(rest) > 1 else ""
+XXXpostup = chr(10) + "POSTUP:" + rest[1] if len(rest) > 1 else ""
 XXXnew_ingreds = []
-XXXfor line in ingreds.split('\n'):
+XXXfor line in ingreds.splitlines():
 XXXXXXif line.strip().startswith('-'):
-XXXXXXXXXdef repl(match):
-XXXXXXXXXXXXval = float(match.group(1)) * multiplier
-XXXXXXXXXXXXreturn str(int(val)) if val.is_integer() else f"{val:.1f}"
-XXXXXXXXXnew_line = re.sub(r"(\d+(?:\.\d+)?)", repl, line, count=1)
-XXXXXXXXXnew_ingreds.append(new_line)
+XXXXXXXXXwords = line.split()
+XXXXXXXXXfor j, w in enumerate(words):
+XXXXXXXXXXXXtry:
+XXXXXXXXXXXXXXXval = float(w)
+XXXXXXXXXXXXXXXnew_val = val * multiplier
+XXXXXXXXXXXXXXXwords[j] = str(int(new_val)) if new_val.is_integer() else str(round(new_val, 1))
+XXXXXXXXXXXXXXXbreak
+XXXXXXXXXXXXexcept ValueError:
+XXXXXXXXXXXXXXXpass
+XXXXXXXXXnew_ingreds.append(" ".join(words))
 XXXXXXelse:
 XXXXXXXXXnew_ingreds.append(line)
-XXXreturn head + "INGREDIENCE:" + "\n".join(new_ingreds) + postup
+XXXreturn head + "INGREDIENCE:" + chr(10).join(new_ingreds) + postup
 
 st.title("🍳 Můj chytrý receptář")
 
@@ -100,10 +103,9 @@ XXXXXXst.rerun()
 
 st.markdown("---")
 
---- VYHLEDÁVÁNÍ, KATEGORIE A OBLÍBENÉ ---
 col_search, col_filter, col_fav = st.columns([2, 1, 1])
 with col_search:
-XXXhledat = st.text_input("🔍 Hledat (surovinu, název)...").lower()
+XXXhledat = st.text_input("🔍 Hledat...").lower()
 with col_filter:
 XXXkategorie = st.selectbox("Kategorie", ["Vše", "Sladké", "Slané"])
 with col_fav:
@@ -143,11 +145,9 @@ XXXXXXXXXXXXbreak
 XXXXXX
 XXXXXXikona = "❤️" if r["fav"] else "🤍"
 XXXXXXwith st.expander(f"{ikona} {nazev}"):
-XXXXXXXXX# --- KALKULAČKA PORCÍ ---
-XXXXXXXXXnasobitel = st.number_input("Násobitel dávky (1 = původní recept)", min_value=0.25, value=1.0, step=0.25, key=f"porce_{i}")
+XXXXXXXXXnasobitel = st.number_input("Násobitel dávky", min_value=0.25, value=1.0, step=0.25, key=f"porce_{i}")
 XXXXXXXXXupraveny_text = adjust_portions(r["text"], nasobitel)
 XXXXXXXXXst.markdown(upraveny_text)
-XXXXXXXXX
 XXXXXXXXXst.markdown("---")
 XXXXXXXXXc1, c2, c3 = st.columns(3)
 XXXXXXXXXif c1.button("❤️ Oblíbit" if not r["fav"] else "💔 Odebrat", key=f"f_{i}"):
@@ -160,4 +160,4 @@ XXXXXXXXXif c3.button("🗑️ Smazat", key=f"d_{i}"):
 XXXXXXXXXXXXst.session_state.recipes.pop(i)
 XXXXXXXXXXXXst.rerun()
 """
-exec(CODE.replace("XXX", "    "))
+exec(CODE.replace("XXX", "    ").replace("\xa0", " "))
