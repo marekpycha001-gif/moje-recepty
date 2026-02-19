@@ -20,18 +20,14 @@ XXXXXXXXXif 'generateContent' in m.supported_generation_methods:
 XXXXXXXXXXXXvalid_models.append(m.name)
 XXXXXXif not valid_models:
 XXXXXXXXXreturn "Chyba: Tvůj klíč nemá povolený žádný mozek."
-XXXXXX
 XXXXXXmodel_name = valid_models[0]
 XXXXXXfor m in valid_models:
 XXXXXXXXXif 'flash' in m:
 XXXXXXXXXXXXmodel_name = m
 XXXXXXXXXXXXbreak
-XXXXXX
 XXXXXXmodel = genai.GenerativeModel(model_name)
-XXXXXX
-XXXXXX# UPRAVENÝ ROZKAZ: Zákaz kopírování, nutnost přepsat vlastními slovy
-XXXXXXprompt = '''Jsi expert na vaření. Všechny objemové míry přepočti na GRAMY (g) a zohledni hustotu surovin. Kusy nech na kusy.
-DŮLEŽITÉ: Nekopíruj původní text slovo od slova! Napiš postup svými vlastními slovy jako úplně nový originální text, abys neporušil autorská práva.
+XXXXXXprompt = '''Jsi expert na vaření. Všechny objemové míry přepočti na GRAMY (g) a zohledni hustotu. Kusy nech na kusy.
+DŮLEŽITÉ: Nekopíruj původní text slovo od slova! Napiš postup svými vlastními slovy jako originální text.
 Vypiš přesně v tomto formátu:
 NÁZEV: [Název]
 KATEGORIE: [Sladké/Slané]
@@ -41,21 +37,15 @@ INGREDIENCE:
 POSTUP:
 
 [Krok]'''
-XXXXXX
-XXXXXXwith st.spinner(f"⏳ Počítám gramy (používám {model_name})..."):
+XXXXXXwith st.spinner(f"⏳ Zpracovávám recept..."):
 XXXXXXXXXif content_type == "image":
 XXXXXXXXXXXXresponse = model.generate_content([prompt, content])
 XXXXXXXXXelse:
 XXXXXXXXXXXXresponse = model.generate_content([prompt, f"Zdroj: {content}"])
-XXXXXXXXX
-XXXXXXXXX# Ochrana proti pádu aplikace kvůli autorským právům
 XXXXXXXXXtry:
 XXXXXXXXXXXXreturn response.text
 XXXXXXXXXexcept ValueError:
-XXXXXXXXXXXXif response.candidates and response.candidates[0].finish_reason == 4:
-XXXXXXXXXXXXXXXreturn "Chyba z obrázku: Ochrana autorských práv! AI odmítla text přečíst, protože je chráněný. Vlož ho raději jako text."
-XXXXXXXXXXXXelse:
-XXXXXXXXXXXXXXXreturn "Chyba AI: Odpověď byla zablokována z bezpečnostních důvodů."
+XXXXXXXXXXXXreturn "Chyba: Ochrana autorských práv! Zkus to vložit jako text."
 XXXexcept Exception as e:
 XXXXXXreturn f"Chyba: {str(e)}"
 
@@ -72,30 +62,51 @@ tab1, tab2 = st.tabs(["📝 Z textu/odkazu", "📸 Z obrázku"])
 
 with tab1:
 XXXurl_input = st.text_area("Vlož odkaz nebo text receptu:")
-XXXif st.button("Vysosat a přepočítat"):
+XXXif st.button("Vysosat a přidat do kuchařky"):
 XXXXXXif url_input:
-XXXXXXXXXrecept = analyze_recipe(url_input, "text", api_key)
-XXXXXXXXXst.session_state.recipes.insert(0, recept)
+XXXXXXXXXrecept_text = analyze_recipe(url_input, "text", api_key)
+XXXXXXXXXst.session_state.recipes.insert(0, {"text": recept_text, "fav": False})
 XXXXXXXXXst.rerun()
 
 with tab2:
 XXXimg_file = st.file_uploader("Nahraj screenshot", type=["jpg", "png", "jpeg"])
 XXXif img_file and st.button("Přečíst z obrázku"):
 XXXXXXimage = Image.open(img_file)
-XXXXXXrecept = analyze_recipe(image, "image", api_key)
-XXXXXXst.session_state.recipes.insert(0, recept)
+XXXXXXrecept_text = analyze_recipe(image, "image", api_key)
+XXXXXXst.session_state.recipes.insert(0, {"text": recept_text, "fav": False})
 XXXXXXst.rerun()
 
 st.markdown("---")
+
+--- NOVINKA: VYHLEDÁVÁNÍ A OBLÍBENÉ ---
+col_search, col_fav = st.columns([2, 1])
+with col_search:
+XXXhledat = st.text_input("🔍 Hledat (surovinu, název)...").lower()
+with col_fav:
+XXXst.write("")
+XXXst.write("")
+XXXjen_oblibene = st.checkbox("❤️ Jen oblíbené")
+
 st.write("### 📚 Uložené recepty")
 
-for i, recept_text in enumerate(st.session_state.recipes):
+for i, r in enumerate(st.session_state.recipes):
+XXX# Záchrana pro staré recepty (převod na nový formát se srdíčky)
+XXXif isinstance(r, str):
+XXXXXXr = {"text": r, "fav": False}
+XXXXXXst.session_state.recipes[i] = r
+
+XXX# Filtrování (schová recept, pokud nesplňuje hledání)
+XXXif jen_oblibene and not r["fav"]:
+XXXXXXcontinue
+XXXif hledat and hledat not in r["text"].lower():
+XXXXXXcontinue
+
 XXXif st.session_state.editing_index == i:
 XXXXXXst.markdown("#### ✏️ Úprava")
-XXXXXXnovy_text = st.text_area("Upravit text", value=recept_text, height=300, key=f"t_{i}", label_visibility="collapsed")
+XXXXXXnovy_text = st.text_area("Upravit text", value=r["text"], height=300, key=f"t_{i}", label_visibility="collapsed")
 XXXXXXc1, c2 = st.columns(2)
 XXXXXXif c1.button("💾 Uložit", key=f"s_{i}"):
-XXXXXXXXXst.session_state.recipes[i] = novy_text
+XXXXXXXXXst.session_state.recipes[i]["text"] = novy_text
 XXXXXXXXXst.session_state.editing_index = None
 XXXXXXXXXst.rerun()
 XXXXXXif c2.button("❌ Zrušit", key=f"c_{i}"):
@@ -103,17 +114,23 @@ XXXXXXXXXst.session_state.editing_index = None
 XXXXXXXXXst.rerun()
 XXXelse:
 XXXXXXnazev = "Recept bez názvu"
-XXXXXXfor line in str(recept_text).splitlines():
+XXXXXXfor line in str(r["text"]).splitlines():
 XXXXXXXXXif "NÁZEV:" in line:
 XXXXXXXXXXXXnazev = line.replace("NÁZEV:", "").strip()
 XXXXXXXXXXXXbreak
-XXXXXXwith st.expander(f"🥘 {nazev}"):
-XXXXXXXXXst.markdown(recept_text)
-XXXXXXXXXc1, c2 = st.columns(2)
-XXXXXXXXXif c1.button("✏️ Upravit", key=f"e_{i}"):
+XXXXXX
+XXXXXX# Přidání srdíčka k názvu
+XXXXXXikona = "❤️" if r["fav"] else "🤍"
+XXXXXXwith st.expander(f"{ikona} {nazev}"):
+XXXXXXXXXst.markdown(r["text"])
+XXXXXXXXXc1, c2, c3 = st.columns(3)
+XXXXXXXXXif c1.button("❤️ Oblíbit" if not r["fav"] else "💔 Odebrat", key=f"f_{i}"):
+XXXXXXXXXXXXst.session_state.recipes[i]["fav"] = not r["fav"]
+XXXXXXXXXXXXst.rerun()
+XXXXXXXXXif c2.button("✏️ Upravit", key=f"e_{i}"):
 XXXXXXXXXXXXst.session_state.editing_index = i
 XXXXXXXXXXXXst.rerun()
-XXXXXXXXXif c2.button("🗑️ Smazat", key=f"d_{i}"):
+XXXXXXXXXif c3.button("🗑️ Smazat", key=f"d_{i}"):
 XXXXXXXXXXXXst.session_state.recipes.pop(i)
 XXXXXXXXXXXXst.rerun()
 """
