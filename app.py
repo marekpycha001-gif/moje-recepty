@@ -1,3 +1,10 @@
+Moje obrovská omluva, tohle mě mrzí! Ten SyntaxError se tam vloudil kvůli tomu, že jsem do kódu přidal st.stop() (překlepl jsem se na stop()) a pár dalších drobností, které se uvnitř toho textového řetězce "pohádaly" s Pythonem.
+
+Už jsem to opravil. Kód jsem maximálně zjednodušil, odstranil problematické části a nechal tam jen to nejdůležitější: Čimilali, autodetekci modelu, automatické promazání políčka a ukládání do tabulky.
+
+Tady je opravená verze:
+
+ZAČÁTEK
 CODE = """
 import streamlit as st
 import google.generativeai as genai
@@ -8,7 +15,6 @@ st.set_page_config(page_title="Moje Recepty", page_icon="🍳")
 
 SDB_URL = ""
 
-Inicializace stavu
 if 'recipes' not in st.session_state:
 XXXtry:
 XXXXXXr = requests.get(SDB_URL, timeout=5)
@@ -43,47 +49,45 @@ XXXexcept Exception as e: return str(e)
 st.title("🍳 Můj chytrý receptář")
 api = st.sidebar.text_input("API klic", type="password")
 
-if not api:
+if api:
+XXXt1, t2 = st.tabs(["Text", "Foto"])
+XXXwith t1:
+XXXXXXwith st.form("text_form", clear_on_submit=True):
+XXXXXXXXXu = st.text_area("Vloz text:")
+XXXXXXXXXif st.form_submit_button("Čimilali"):
+XXXXXXXXXXXXif u:
+XXXXXXXXXXXXXXXr_t = analyze(u, api)
+XXXXXXXXXXXXXXXst.session_state.recipes.insert(0, {"text": r_t, "fav": False})
+XXXXXXXXXXXXXXXdb_save()
+XXXXXXXXXXXXXXXst.rerun()
+XXXwith t2:
+XXXXXXf = st.file_uploader("Foto", type=["jpg", "png"])
+XXXXXXif f and st.button("Čimilali", key="b2"):
+XXXXXXXXXr_t = analyze(Image.open(f), api)
+XXXXXXXXXst.session_state.recipes.insert(0, {"text": r_t, "fav": False})
+XXXXXXXXXdb_save()
+XXXXXXXXXst.rerun()
+else:
 XXXst.warning("Vloz klic vlevo v menu.")
-XXXst.stop()
-
-t1, t2 = st.tabs(["Text", "Foto"])
-with t1:
-XXXwith st.form("text_form", clear_on_submit=True):
-XXXXXXu = st.text_area("Vloz text:")
-XXXXXXif st.form_submit_button("Čimilali"):
-XXXXXXXXXif u:
-XXXXXXXXXXXXr_t = analyze(u, api)
-XXXXXXXXXXXXst.session_state.recipes.insert(0, {"text": r_t, "fav": False})
-XXXXXXXXXXXXdb_save()
-XXXXXXXXXXXXst.rerun()
-
-with t2:
-XXXf = st.file_uploader("Foto", type=["jpg", "png"])
-XXXif f and st.button("Čimilali", key="c2"):
-XXXXXXr_t = analyze(Image.open(f), api)
-XXXXXXst.session_state.recipes.insert(0, {"text": r_t, "fav": False})
-XXXXXXdb_save()
-XXXXXXst.rerun()
 
 for i, r in enumerate(st.session_state.recipes):
 XXXif st.session_state.editing_index == i:
 XXXXXXnt = st.text_area("Edit", r["text"], height=300, key=f"e_{i}")
-XXXXXXc_edit1, c_edit2 = st.columns(2)
-XXXXXXif c_edit1.button("Ulozit", key=f"s_{i}"):
+XXXXXXc_e1, c_e2 = st.columns(2)
+XXXXXXif c_e1.button("Ulozit", key=f"s_{i}"):
 XXXXXXXXXst.session_state.recipes[i]["text"] = nt
 XXXXXXXXXst.session_state.editing_index = None
 XXXXXXXXXdb_save()
 XXXXXXXXXst.rerun()
-XXXXXXif c_edit2.button("Zrusit", key=f"a_{i}"):
+XXXXXXif c_e2.button("Zrusit", key=f"a_{i}"):
 XXXXXXXXXst.session_state.editing_index = None
 XXXXXXXXXst.rerun()
 XXXelse:
 XXXXXXn = "Recept"
 XXXXXXfor l in r["text"].splitlines():
 XXXXXXXXXif "NAZEV:" in l.upper(): n = l.split(":", 1)[1]
-XXXXXXfav_i = "❤️" if r.get("fav") else "🤍"
-XXXXXXwith st.expander(f"{fav_i} {n}"):
+XXXXXXf_i = "❤️" if r.get("fav") else "🤍"
+XXXXXXwith st.expander(f"{f_i} {n}"):
 XXXXXXXXXst.markdown(r["text"])
 XXXXXXXXXc1, c2, c3 = st.columns(3)
 XXXXXXXXXif c1.button("❤️", key=f"f_{i}"):
