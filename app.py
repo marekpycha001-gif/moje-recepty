@@ -2,6 +2,7 @@ CODE = """
 import streamlit as st
 import google.generativeai as genai
 from PIL import Image
+import re
 
 st.set_page_config(page_title="Moje Recepty", page_icon="🍳")
 
@@ -26,18 +27,18 @@ XXXXXXXXXif 'flash' in m:
 XXXXXXXXXXXXmodel_name = m
 XXXXXXXXXXXXbreak
 XXXXXXmodel = genai.GenerativeModel(model_name)
-XXXXXXprompt = '''Jsi expert na vaření. Všechny objemové míry přepočti na GRAMY (g) a zohledni hustotu. Kusy nech na kusy.
-DŮLEŽITÉ: Nekopíruj původní text slovo od slova! Napiš postup svými vlastními slovy jako originální text.
+XXXXXXprompt = '''Jsi expert na vaření. Všechny objemové míry přepočti na GRAMY (g).
+DŮLEŽITÉ: Nekopíruj text slovo od slova. Napiš postup vlastními slovy.
 Vypiš přesně v tomto formátu:
 NÁZEV: [Název]
-KATEGORIE: [Sladké/Slané]
+KATEGORIE: [Sladké nebo Slané]
 INGREDIENCE:
 
-[g] [surovina]
+[číslo] [g/ks] [surovina]
 POSTUP:
 
 [Krok]'''
-XXXXXXwith st.spinner(f"⏳ Zpracovávám recept..."):
+XXXXXXwith st.spinner(f"⏳ Zpracovávám recept a určuji kategorii..."):
 XXXXXXXXXif content_type == "image":
 XXXXXXXXXXXXresponse = model.generate_content([prompt, content])
 XXXXXXXXXelse:
@@ -45,9 +46,30 @@ XXXXXXXXXXXXresponse = model.generate_content([prompt, f"Zdroj: {content}"])
 XXXXXXXXXtry:
 XXXXXXXXXXXXreturn response.text
 XXXXXXXXXexcept ValueError:
-XXXXXXXXXXXXreturn "Chyba: Ochrana autorských práv! Zkus to vložit jako text."
+XXXXXXXXXXXXreturn "Chyba: Ochrana autorských práv! Zkus text vložit ručně."
 XXXexcept Exception as e:
 XXXXXXreturn f"Chyba: {str(e)}"
+
+--- FUNKCE PRO PŘEPOČET PORCÍ ---
+def adjust_portions(text, multiplier):
+XXXif multiplier == 1.0: return text
+XXXparts = text.split("INGREDIENCE:")
+XXXif len(parts) != 2: return text
+XXXhead = parts[0]
+XXXrest = parts[1].split("POSTUP:")
+XXXingreds = rest[0]
+XXXpostup = "\nPOSTUP:" + rest[1] if len(rest) > 1 else ""
+XXXnew_ingreds = []
+XXXfor line in ingreds.split('\n'):
+XXXXXXif line.strip().startswith('-'):
+XXXXXXXXXdef repl(match):
+XXXXXXXXXXXXval = float(match.group(1)) * multiplier
+XXXXXXXXXXXXreturn str(int(val)) if val.is_integer() else f"{val:.1f}"
+XXXXXXXXXnew_line = re.sub(r"(\d+(?:\.\d+)?)", repl, line, count=1)
+XXXXXXXXXnew_ingreds.append(new_line)
+XXXXXXelse:
+XXXXXXXXXnew_ingreds.append(line)
+XXXreturn head + "INGREDIENCE:" + "\n".join(new_ingreds) + postup
 
 st.title("🍳 Můj chytrý receptář")
 
@@ -78,28 +100,28 @@ XXXXXXst.rerun()
 
 st.markdown("---")
 
---- NOVINKA: VYHLEDÁVÁNÍ A OBLÍBENÉ ---
-col_search, col_fav = st.columns([2, 1])
+--- VYHLEDÁVÁNÍ, KATEGORIE A OBLÍBENÉ ---
+col_search, col_filter, col_fav = st.columns([2, 1, 1])
 with col_search:
 XXXhledat = st.text_input("🔍 Hledat (surovinu, název)...").lower()
+with col_filter:
+XXXkategorie = st.selectbox("Kategorie", ["Vše", "Sladké", "Slané"])
 with col_fav:
 XXXst.write("")
 XXXst.write("")
-XXXjen_oblibene = st.checkbox("❤️ Jen oblíbené")
+XXXjen_oblibene = st.checkbox("❤️ Oblíbené")
 
 st.write("### 📚 Uložené recepty")
 
 for i, r in enumerate(st.session_state.recipes):
-XXX# Záchrana pro staré recepty (převod na nový formát se srdíčky)
 XXXif isinstance(r, str):
 XXXXXXr = {"text": r, "fav": False}
 XXXXXXst.session_state.recipes[i] = r
 
-XXX# Filtrování (schová recept, pokud nesplňuje hledání)
-XXXif jen_oblibene and not r["fav"]:
-XXXXXXcontinue
-XXXif hledat and hledat not in r["text"].lower():
-XXXXXXcontinue
+XXXtext_lower = r["text"].lower()
+XXXif jen_oblibene and not r["fav"]: continue
+XXXif hledat and hledat not in text_lower: continue
+XXXif kategorie != "Vše" and kategorie.lower() not in text_lower: continue
 
 XXXif st.session_state.editing_index == i:
 XXXXXXst.markdown("#### ✏️ Úprava")
@@ -119,10 +141,14 @@ XXXXXXXXXif "NÁZEV:" in line:
 XXXXXXXXXXXXnazev = line.replace("NÁZEV:", "").strip()
 XXXXXXXXXXXXbreak
 XXXXXX
-XXXXXX# Přidání srdíčka k názvu
 XXXXXXikona = "❤️" if r["fav"] else "🤍"
 XXXXXXwith st.expander(f"{ikona} {nazev}"):
-XXXXXXXXXst.markdown(r["text"])
+XXXXXXXXX# --- KALKULAČKA PORCÍ ---
+XXXXXXXXXnasobitel = st.number_input("Násobitel dávky (1 = původní recept)", min_value=0.25, value=1.0, step=0.25, key=f"porce_{i}")
+XXXXXXXXXupraveny_text = adjust_portions(r["text"], nasobitel)
+XXXXXXXXXst.markdown(upraveny_text)
+XXXXXXXXX
+XXXXXXXXXst.markdown("---")
 XXXXXXXXXc1, c2, c3 = st.columns(3)
 XXXXXXXXXif c1.button("❤️ Oblíbit" if not r["fav"] else "💔 Odebrat", key=f"f_{i}"):
 XXXXXXXXXXXXst.session_state.recipes[i]["fav"] = not r["fav"]
