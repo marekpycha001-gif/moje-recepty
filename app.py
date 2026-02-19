@@ -3,18 +3,17 @@ import streamlit as st
 import google.generativeai as genai
 from PIL import Image
 import requests
-import pandas as pd
 
 st.set_page_config(page_title="Moje Recepty", page_icon="🍳")
 
 SDB_URL = ""
 
+Načtení dat při startu
 if 'recipes' not in st.session_state:
 XXXtry:
-XXXXXXres = requests.get(SDB_URL, timeout=10)
+XXXXXXres = requests.get(SDB_URL, timeout=5)
 XXXXXXif res.status_code == 200:
-XXXXXXXXXdata = res.json()
-XXXXXXXXXst.session_state.recipes = [{"text": r.get("text", ""), "fav": str(r.get("fav", "")).lower() == "true"} for r in data]
+XXXXXXXXXst.session_state.recipes = [{"text": r.get("text", ""), "fav": str(r.get("fav", "")).lower() == "true"} for r in res.json()]
 XXXXXXelse: st.session_state.recipes = []
 XXXexcept: st.session_state.recipes = []
 
@@ -23,14 +22,15 @@ XXXst.session_state.editing_index = None
 
 def save_to_db():
 XXXtry:
+XXXXXX# 1. Smazat stará data
 XXXXXXrequests.delete(SDB_URL + "/all")
+XXXXXX# 2. Poslat nová data
 XXXXXXif st.session_state.recipes:
-XXXXXXXXXdata_to_send = []
-XXXXXXXXXfor r in st.session_state.recipes:
-XXXXXXXXXXXXdata_to_send.append({"text": str(r["text"]), "fav": str(r["fav"]).lower()})
-XXXXXXXXXrequests.post(SDB_URL, json={"data": data_to_send}, timeout=10)
+XXXXXXXXXpayload = {"data": [{"text": r["text"], "fav": str(r["fav"]).lower()} for r in st.session_state.recipes]}
+XXXXXXXXXr = requests.post(SDB_URL, json=payload, timeout=10)
+XXXXXXXXXreturn r.status_code
 XXXexcept Exception as e:
-XXXXXXst.error(f"Chyba ukladani: {e}")
+XXXXXXreturn str(e)
 
 def analyze_recipe(content, content_type, api_key):
 XXXtry:
@@ -120,5 +120,9 @@ XXXXXXXXXif c3.button("🗑️", key=f"d_{i}"):
 XXXXXXXXXXXXst.session_state.recipes.pop(i)
 XXXXXXXXXXXXsave_to_db()
 XXXXXXXXXXXXst.rerun()
+
+st.divider()
+status = save_to_db()
+st.caption(f"Status tabulky: {status} (200 nebo 201 je OK)")
 """
 exec(CODE.replace("XXX", "    "))
