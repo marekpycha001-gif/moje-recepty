@@ -32,9 +32,12 @@ XXXexcept: pass
 def analyze_recipe(content, content_type, api_key):
 XXXtry:
 XXXXXXgenai.configure(api_key=api_key)
-XXXXXXmodel = genai.GenerativeModel("gemini-1.5-flash")
+XXXXXXvalid_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+XXXXXXif not valid_models: return "Chyba: Zadny model neni dostupny."
+XXXXXXmodel_name = next((m for m in valid_models if "flash" in m), valid_models[0])
+XXXXXXmodel = genai.GenerativeModel(model_name)
 XXXXXXprompt = 'Jsi expert na vareni. Vsechny objemove miry prepocitej na GRAMY (g). Nekopiruj text slovo od slova. Napis postup vlastnimi slovy. Vystup: NAZEV: [Nazev], KATEGORIE: [Sladke/Slane], INGREDIENCE: - [cislo] [jednotka] [surovina], POSTUP: 1. [Krok]'
-XXXXXXwith st.spinner("Zpracovavam..."):
+XXXXXXwith st.spinner(f"Cimilali maka..."):
 XXXXXXXXXresponse = model.generate_content([prompt, content])
 XXXXXXXXXreturn response.text
 XXXexcept Exception as e: return str(e)
@@ -70,10 +73,11 @@ t1, t2 = st.tabs(["Text", "Obrazek"])
 with t1:
 XXXu = st.text_area("Vloz text:")
 XXXif st.button("Čimilali", key="b1"):
-XXXXXXr = analyze_recipe(u, "text", api_key)
-XXXXXXst.session_state.recipes.insert(0, {"text": r, "fav": False})
-XXXXXXsave_to_db()
-XXXXXXst.rerun()
+XXXXXXif u:
+XXXXXXXXXr = analyze_recipe(u, "text", api_key)
+XXXXXXXXXst.session_state.recipes.insert(0, {"text": r, "fav": False})
+XXXXXXXXXsave_to_db()
+XXXXXXXXXst.rerun()
 with t2:
 XXXf = st.file_uploader("Foto", type=["jpg", "png"])
 XXXif f and st.button("Čimilali", key="b2"):
