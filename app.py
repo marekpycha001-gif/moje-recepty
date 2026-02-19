@@ -6,7 +6,6 @@ import requests
 
 st.set_page_config(page_title="Moje Recepty", page_icon="🍳")
 
-TVŮJ NOVÝ ODKAZ:
 SDB_URL = ""
 
 if "recipes" not in st.session_state:
@@ -22,13 +21,11 @@ XXXst.session_state.editing_index = None
 
 def db_save():
 XXXtry:
-XXXXXX# Nejdřív smažeme všechno v tabulce (tím zmizí i to "ahoj")
 XXXXXXrequests.delete(SDB_URL + "/all")
 XXXXXXif st.session_state.recipes:
 XXXXXXXXXdata = [{"text": r["text"], "fav": str(r["fav"]).lower()} for r in st.session_state.recipes]
 XXXXXXXXXrequests.post(SDB_URL, json={"data": data})
-XXXexcept Exception as e:
-XXXXXXst.error(f"Chyba spojení s tabulkou: {e}")
+XXXexcept: pass
 
 def analyze(content, api_key):
 XXXtry:
@@ -37,46 +34,43 @@ XXXXXXmodels = [m.name for m in genai.list_models() if "generateContent" in m.su
 XXXXXXm_name = next((m for m in models if "flash" in m), models[0])
 XXXXXXmodel = genai.GenerativeModel(m_name)
 XXXXXXp = "Jsi expert na vareni. Vsechny miry dej na gramy (g). Format: NAZEV: [Nazev], INGREDIENCE: - [cislo] [jednotka] [surovina], POSTUP: 1. [Krok]"
-XXXXXXwith st.spinner("Čimilali maká..."):
+XXXXXXwith st.spinner("Cimilali maka..."):
 XXXXXXXXXres = model.generate_content([p, content])
 XXXXXXXXXreturn res.text
 XXXexcept Exception as e: return str(e)
 
-st.title("🍳 Můj chytrý receptář")
-api = st.sidebar.text_input("Vlož API klíč", type="password")
+st.title("🍳 Muj chytry receptar")
+api = st.sidebar.text_input("Vlozit API klic", type="password")
 
 if api:
 XXXt1, t2 = st.tabs(["Text", "Foto"])
 XXXwith t1:
 XXXXXXwith st.form("t_form", clear_on_submit=True):
-XXXXXXXXXu = st.text_area("Vlož text:")
-XXXXXXXXXif st.form_submit_button("Čimilali"):
+XXXXXXXXXu = st.text_area("Vlozit text:")
+XXXXXXXXXif st.form_submit_button("Cimilali"):
 XXXXXXXXXXXXif u:
 XXXXXXXXXXXXXXXr_t = analyze(u, api)
-XXXXXXXXXXXXXXX# Pokud AI vrátí chybu o limitu, recept se nepřidá
 XXXXXXXXXXXXXXXif "quota" not in r_t.lower():
 XXXXXXXXXXXXXXXXXXst.session_state.recipes.insert(0, {"text": r_t, "fav": False})
 XXXXXXXXXXXXXXXXXXdb_save()
 XXXXXXXXXXXXXXXXXXst.rerun()
-XXXXXXXXXXXXXXXelse:
-XXXXXXXXXXXXXXXXXXst.error(r_t)
+XXXXXXXXXXXXXXXelse: st.error("Dosel denni limit receptu.")
 XXXwith t2:
 XXXXXXf = st.file_uploader("Foto", type=["jpg", "png"])
-XXXXXXif f and st.button("Čimilali", key="c2"):
+XXXXXXif f and st.button("Cimilali", key="c2"):
 XXXXXXXXXr_t = analyze(Image.open(f), api)
 XXXXXXXXXif "quota" not in r_t.lower():
 XXXXXXXXXXXXst.session_state.recipes.insert(0, {"text": r_t, "fav": False})
 XXXXXXXXXXXXdb_save()
 XXXXXXXXXXXXst.rerun()
-XXXXXXXXXelse:
-XXXXXXXXXXXXst.error(r_t)
+XXXXXXXXXelse: st.error("Dosel denni limit receptu.")
 else:
-XXXst.info("Vlož Google API klíč vlevo v menu.")
+XXXst.info("Vlozit klic vlevo.")
 
 for i, r in enumerate(st.session_state.recipes):
 XXXif st.session_state.editing_index == i:
 XXXXXXnt = st.text_area("Edit", r["text"], height=300, key=f"e_{i}")
-XXXXXXif st.button("Uložit", key=f"s_{i}"):
+XXXXXXif st.button("Ulozit", key=f"s_{i}"):
 XXXXXXXXXst.session_state.recipes[i]["text"] = nt
 XXXXXXXXXst.session_state.editing_index = None
 XXXXXXXXXdb_save()
@@ -92,10 +86,10 @@ XXXXXXXXXif c1.button("❤️", key=f"f_{i}"):
 XXXXXXXXXXXXst.session_state.recipes[i]["fav"] = not r.get("fav")
 XXXXXXXXXXXXdb_save()
 XXXXXXXXXXXXst.rerun()
-XXXXXXXXXif c2.button("✏️", key=f"ed_{i}"):
+XXXXXXXXXif c2.button("Upravit", key=f"ed_{i}"):
 XXXXXXXXXXXXst.session_state.editing_index = i
 XXXXXXXXXXXXst.rerun()
-XXXXXXXXXif c3.button("🗑️", key=f"d_{i}"):
+XXXXXXXXXif c3.button("Smazat", key=f"d_{i}"):
 XXXXXXXXXXXXst.session_state.recipes.pop(i)
 XXXXXXXXXXXXdb_save()
 XXXXXXXXXXXXst.rerun()
