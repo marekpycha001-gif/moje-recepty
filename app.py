@@ -14,8 +14,6 @@ XXXst.session_state.editing_index = None
 def analyze_recipe(content, content_type, api_key):
 XXXtry:
 XXXXXXgenai.configure(api_key=api_key)
-XXXXXX# Nyní používáme nejstabilnější název modelu
-XXXXXXmodel = genai.GenerativeModel('gemini-1.5-flash')
 XXXXXXprompt = '''Jsi expert na vaření. Všechny objemové míry přepočti na GRAMY (g) a zohledni hustotu surovin (olej/med atd.). Kusy nech na kusy.
 Vypiš přesně v tomto formátu:
 NÁZEV: [Název]
@@ -27,10 +25,21 @@ POSTUP:
 
 [Krok]'''
 XXXXXXwith st.spinner("⏳ Počítám gramy a píšu recept..."):
-XXXXXXXXXif content_type == "image":
-XXXXXXXXXXXXresponse = model.generate_content([prompt, content])
-XXXXXXXXXelse:
-XXXXXXXXXXXXresponse = model.generate_content([prompt, f"Zdroj: {content}"])
+XXXXXXXXXtry:
+XXXXXXXXXXXX# Nejprve zkusíme nový model
+XXXXXXXXXXXXmodel = genai.GenerativeModel('gemini-1.5-flash')
+XXXXXXXXXXXXif content_type == "image":
+XXXXXXXXXXXXXXXresponse = model.generate_content([prompt, content])
+XXXXXXXXXXXXelse:
+XXXXXXXXXXXXXXXresponse = model.generate_content([prompt, f"Zdroj: {content}"])
+XXXXXXXXXexcept Exception:
+XXXXXXXXXXXX# ZÁCHRANNÁ BRZDA: Pokud nový model není dostupný, použijeme starší, který funguje všude
+XXXXXXXXXXXXif content_type == "image":
+XXXXXXXXXXXXXXXmodel = genai.GenerativeModel('gemini-pro-vision')
+XXXXXXXXXXXXXXXresponse = model.generate_content([prompt, content])
+XXXXXXXXXXXXelse:
+XXXXXXXXXXXXXXXmodel = genai.GenerativeModel('gemini-pro')
+XXXXXXXXXXXXXXXresponse = model.generate_content([prompt, f"Zdroj: {content}"])
 XXXXXXreturn response.text
 XXXexcept Exception as e:
 XXXXXXreturn f"Chyba: {str(e)}"
