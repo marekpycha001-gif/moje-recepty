@@ -67,7 +67,7 @@ XXXst.stop()
 t1, t2 = st.tabs(["Text", "Obrazek"])
 with t1:
 XXXu = st.text_area("Vloz text:")
-XXXif st.button("Pridat text"):
+XXXif st.button("Kouzlo"):
 XXXXXXr = analyze_recipe(u, "text", api_key)
 XXXXXXst.session_state.recipes.insert(0, {"text": r, "fav": False})
 XXXXXXst.rerun()
