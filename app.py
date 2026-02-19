@@ -48,18 +48,21 @@ XXXst.stop()
 
 t1, t2 = st.tabs(["Text", "Foto"])
 with t1:
-XXXu = st.text_area("Vloz text:")
+XXXu = st.text_area("Vloz text:", key="input_text")
 XXXif st.button("Čimilali", key="c1"):
-XXXXXXr_t = analyze(u, api)
-XXXXXXst.session_state.recipes.insert(0, {"text": r_t, "fav": False})
-XXXXXXdb_save()
-XXXXXXst.rerun()
+XXXXXXif u:
+XXXXXXXXXr_t = analyze(u, api)
+XXXXXXXXXst.session_state.recipes.insert(0, {"text": r_t, "fav": False})
+XXXXXXXXXdb_save()
+XXXXXXXXXst.session_state.input_text = "" # Tohle smaze text po pridani
+XXXXXXXXXst.rerun()
 with t2:
-XXXf = st.file_uploader("Foto", type=["jpg", "png"])
+XXXf = st.file_uploader("Foto", type=["jpg", "png"], key="input_file")
 XXXif f and st.button("Čimilali", key="c2"):
 XXXXXXr_t = analyze(Image.open(f), api)
 XXXXXXst.session_state.recipes.insert(0, {"text": r_t, "fav": False})
 XXXXXXdb_save()
+XXXXXX# U souboru to nejde smazat tak snadno, ale po rerun se vycisti stav
 XXXXXXst.rerun()
 
 for i, r in enumerate(st.session_state.recipes):
