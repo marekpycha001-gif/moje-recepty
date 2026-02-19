@@ -8,121 +8,101 @@ st.set_page_config(page_title="Moje Recepty", page_icon="🍳")
 
 SDB_URL = ""
 
-Načtení dat při startu
 if 'recipes' not in st.session_state:
 XXXtry:
-XXXXXXres = requests.get(SDB_URL, timeout=5)
-XXXXXXif res.status_code == 200:
-XXXXXXXXXst.session_state.recipes = [{"text": r.get("text", ""), "fav": str(r.get("fav", "")).lower() == "true"} for r in res.json()]
-XXXXXXelse: st.session_state.recipes = []
+XXXXXXr = requests.get(SDB_URL, timeout=5)
+XXXXXXst.session_state.recipes = [{"text": x.get("text", ""), "fav": str(x.get("fav", "")).lower() == "true"} for x in r.json()]
 XXXexcept: st.session_state.recipes = []
 
 if 'editing_index' not in st.session_state:
 XXXst.session_state.editing_index = None
 
-def save_to_db():
+def db_save():
 XXXtry:
-XXXXXX# 1. Smazat stará data
 XXXXXXrequests.delete(SDB_URL + "/all")
-XXXXXX# 2. Poslat nová data
 XXXXXXif st.session_state.recipes:
-XXXXXXXXXpayload = {"data": [{"text": r["text"], "fav": str(r["fav"]).lower()} for r in st.session_state.recipes]}
-XXXXXXXXXr = requests.post(SDB_URL, json=payload, timeout=10)
-XXXXXXXXXreturn r.status_code
-XXXexcept Exception as e:
-XXXXXXreturn str(e)
+XXXXXXXXXdata = [{"text": r["text"], "fav": str(r["fav"]).lower()} for r in st.session_state.recipes]
+XXXXXXXXXrequests.post(SDB_URL, json={"data": data})
+XXXexcept: pass
 
-def analyze_recipe(content, content_type, api_key):
+def analyze(content, api_key):
 XXXtry:
 XXXXXXgenai.configure(api_key=api_key)
-XXXXXXvalid_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-XXXXXXmodel_name = next((m for m in valid_models if "flash" in m), valid_models[0])
-XXXXXXmodel = genai.GenerativeModel(model_name)
-XXXXXXprompt = 'Jsi expert na vareni. Vsechny objemove miry prepocitej na GRAMY (g). Vystup: NAZEV: [Nazev], INGREDIENCE: - [cislo] [jednotka] [surovina], POSTUP: 1. [Krok]'
-XXXXXXwith st.spinner("Čimilali maká..."):
-XXXXXXXXXresponse = model.generate_content([prompt, content])
-XXXXXXXXXreturn response.text
+XXXXXXmodel = genai.GenerativeModel("gemini-1.5-flash")
+XXXXXXprompt = "Jsi expert na vareni. Vsechny miry dej na gramy (g). Napis vlastnimi slovy. Format: NAZEV: [Nazev], INGREDIENCE: - [cislo] [jednotka] [surovina], POSTUP: 1. [Krok]"
+XXXXXXwith st.spinner("Čimilali maka..."):
+XXXXXXXXXres = model.generate_content([prompt, content])
+XXXXXXXXXreturn res.text
 XXXexcept Exception as e: return str(e)
 
-def adjust_portions(text, multiplier):
-XXXif multiplier == 1.0: return text
+def calc(text, m):
+XXXif m == 1.0: return text
 XXXlines = text.splitlines()
-XXXnew_lines, is_ing = [], False
-XXXfor line in lines:
-XXXXXXif "INGREDIENCE" in line.upper(): is_ing = True
-XXXXXXif "POSTUP" in line.upper(): is_ing = False
-XXXXXXif is_ing and line.strip().startswith("-"):
-XXXXXXXXXwords = line.split()
-XXXXXXXXXfor i, w in enumerate(words):
+XXXnew, is_ing = [], False
+XXXfor l in lines:
+XXXXXXif "INGREDIENCE" in l.upper(): is_ing = True
+XXXXXXif "POSTUP" in l.upper(): is_ing = False
+XXXXXXif is_ing and l.strip().startswith("-"):
+XXXXXXXXXw = l.split()
+XXXXXXXXXfor i, word in enumerate(w):
 XXXXXXXXXXXXtry:
-XXXXXXXXXXXXXXXnum = float(w.replace(",", "."))
-XXXXXXXXXXXXXXXnew_num = num * multiplier
-XXXXXXXXXXXXXXXwords[i] = str(int(new_num)) if new_num.is_integer() else str(round(new_num, 1))
+XXXXXXXXXXXXXXXv = float(word.replace(",", ".")) * m
+XXXXXXXXXXXXXXXw[i] = str(int(v)) if v.is_integer() else str(round(v, 1))
 XXXXXXXXXXXXXXXbreak
 XXXXXXXXXXXXexcept: continue
-XXXXXXXXXnew_lines.append(" ".join(words))
-XXXXXXelse: new_lines.append(line)
+XXXXXXXXXnew.append(" ".join(w))
+XXXXXXelse: new.append(l)
 XXXreturn chr(10).join(new_lines)
 
 st.title("🍳 Můj chytrý receptář")
-with st.expander("Nastaveni"):
-XXXapi_key = st.text_input("API klic", type="password")
-if not api_key:
-XXXst.warning("Vloz klic.")
+api = st.sidebar.text_input("API klic", type="password")
+
+if not api:
+XXXst.warning("Vloz klic vlevo v menu.")
 XXXst.stop()
 
-t1, t2 = st.tabs(["Text", "Obrazek"])
+t1, t2 = st.tabs(["Text", "Foto"])
 with t1:
 XXXu = st.text_area("Vloz text:")
-XXXif st.button("Čimilali", key="b1"):
-XXXXXXr_text = analyze_recipe(u, "text", api_key)
-XXXXXXst.session_state.recipes.insert(0, {"text": r_text, "fav": False})
-XXXXXXsave_to_db()
+XXXif st.button("Čimilali", key="c1"):
+XXXXXXr_t = analyze(u, api)
+XXXXXXst.session_state.recipes.insert(0, {"text": r_t, "fav": False})
+XXXXXXdb_save()
 XXXXXXst.rerun()
 with t2:
 XXXf = st.file_uploader("Foto", type=["jpg", "png"])
-XXXif f and st.button("Čimilali", key="b2"):
-XXXXXXr_text = analyze_recipe(Image.open(f), "image", api_key)
-XXXXXXst.session_state.recipes.insert(0, {"text": r_text, "fav": False})
-XXXXXXsave_to_db()
+XXXif f and st.button("Čimilali", key="c2"):
+XXXXXXr_t = analyze(Image.open(f), api)
+XXXXXXst.session_state.recipes.insert(0, {"text": r_t, "fav": False})
+XXXXXXdb_save()
 XXXXXXst.rerun()
 
-st.divider()
-h = st.text_input("🔍 Hledat...").lower()
-ob = st.checkbox("❤️ Jen oblibene")
-
 for i, r in enumerate(st.session_state.recipes):
-XXXif ob and not r.get("fav"): continue
-XXXif h and h not in r["text"].lower(): continue
 XXXif st.session_state.editing_index == i:
-XXXXXXnt = st.text_area("Upravit", r["text"], height=300, key=f"e_{i}")
+XXXXXXnt = st.text_area("Edit", r["text"], height=300, key=f"e_{i}")
 XXXXXXif st.button("Ulozit", key=f"s_{i}"):
 XXXXXXXXXst.session_state.recipes[i]["text"] = nt
 XXXXXXXXXst.session_state.editing_index = None
-XXXXXXXXXsave_to_db()
+XXXXXXXXXdb_save()
 XXXXXXXXXst.rerun()
 XXXelse:
-XXXXXXnazev = "Recept"
+XXXXXXn = "Recept"
 XXXXXXfor l in r["text"].splitlines():
-XXXXXXXXXif "NAZEV:" in l.upper(): nazev = l.split(":", 1)[1]
-XXXXXXwith st.expander(f"{'❤️' if r.get('fav') else '🤍'} {nazev}"):
-XXXXXXXXXm = st.number_input("Nasobitel", 0.5, 5.0, 1.0, 0.5, key=f"m_{i}")
-XXXXXXXXXst.markdown(adjust_portions(r["text"], m))
+XXXXXXXXXif "NAZEV:" in l.upper(): n = l.split(":", 1)[1]
+XXXXXXwith st.expander(f"{'❤️' if r.get('fav') else '🤍'} {n}"):
+XXXXXXXXXm = st.number_input("Porce", 0.5, 5.0, 1.0, 0.5, key=f"m_{i}")
+XXXXXXXXXst.markdown(r["text"])
 XXXXXXXXXc1, c2, c3 = st.columns(3)
-XXXXXXXXXif c1.button("❤️/💔", key=f"f_{i}"):
+XXXXXXXXXif c1.button("❤️", key=f"f_{i}"):
 XXXXXXXXXXXXst.session_state.recipes[i]["fav"] = not r.get("fav")
-XXXXXXXXXXXXsave_to_db()
+XXXXXXXXXXXXdb_save()
 XXXXXXXXXXXXst.rerun()
 XXXXXXXXXif c2.button("✏️", key=f"ed_{i}"):
 XXXXXXXXXXXXst.session_state.editing_index = i
 XXXXXXXXXXXXst.rerun()
 XXXXXXXXXif c3.button("🗑️", key=f"d_{i}"):
 XXXXXXXXXXXXst.session_state.recipes.pop(i)
-XXXXXXXXXXXXsave_to_db()
+XXXXXXXXXXXXdb_save()
 XXXXXXXXXXXXst.rerun()
-
-st.divider()
-status = save_to_db()
-st.caption(f"Status tabulky: {status} (200 nebo 201 je OK)")
 """
 exec(CODE.replace("XXX", "    "))
