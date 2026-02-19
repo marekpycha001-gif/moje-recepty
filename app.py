@@ -164,6 +164,3 @@ XXXXXXXXXXXXst.session_state.recipes.pop(i)
 XXXXXXXXXXXXst.rerun()
 """
 exec(CODE.replace("XXX", "    "))
-KONEC
-
-Dej vědět, jakmile to tam hodíš! Odstranil jsem všechny krkolomné programátorské triky, takže tohle se prostě spustí a bude spolehlivě počítat i hodnoty jako 1.5g nebo 200ml. Hned jak to pofičí, mám pro tebe připravený ten SheetDB kód na ukládání!
