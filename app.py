@@ -14,7 +14,7 @@ XXXst.session_state.editing_index = None
 def analyze_recipe(content, content_type, api_key):
 XXXtry:
 XXXXXXgenai.configure(api_key=api_key)
-XXXXXXmodel = genai.GenerativeModel('gemini-1.5-flash')
+XXXXXXmodel = genai.GenerativeModel('gemini-1.5-flash-latest')
 XXXXXXprompt = '''Jsi expert na vaření. Všechny objemové míry přepočti na GRAMY (g) a zohledni hustotu surovin (olej/med atd.). Kusy nech na kusy.
 Vypiš přesně v tomto formátu:
 NÁZEV: [Název]
