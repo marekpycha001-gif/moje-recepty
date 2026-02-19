@@ -1,10 +1,3 @@
-Moje obrovská omluva, tohle mě mrzí! Ten SyntaxError se tam vloudil kvůli tomu, že jsem do kódu přidal st.stop() (překlepl jsem se na stop()) a pár dalších drobností, které se uvnitř toho textového řetězce "pohádaly" s Pythonem.
-
-Už jsem to opravil. Kód jsem maximálně zjednodušil, odstranil problematické části a nechal tam jen to nejdůležitější: Čimilali, autodetekci modelu, automatické promazání políčka a ukládání do tabulky.
-
-Tady je opravená verze:
-
-ZAČÁTEK
 CODE = """
 import streamlit as st
 import google.generativeai as genai
