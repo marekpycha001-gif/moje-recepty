@@ -116,7 +116,7 @@ def export_pdf():
     except:
         return None
 
-# -------- CSS PRO STYL A FLEX --------
+# -------- CSS PRO STYL --------
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400;700&display=swap');
@@ -124,9 +124,9 @@ body, [data-testid="stAppViewContainer"] {
     background: radial-gradient(ellipse at bottom, #000428 0%, #004e92 100%);
     color: #ffffff;
 }
-h1.app-title {font-family: 'Dancing Script', cursive; font-size: 20px; color:#00ccff; font-weight:700; margin:0px;}
+h1.app-title {font-family: 'Dancing Script', cursive; font-size:20px; color:#00ccff; font-weight:700; margin:0px;}
 div.icon-row {display:flex; flex-direction:row; justify-content:flex-start; gap:5px; margin-bottom:5px;}
-div.stButton > button {height:35px; font-size:16px; background:#0099ff; color:white; border-radius:8px;}
+div.stButton > button {height:35px; font-size:16px; background:#0099ff; color:white; border-radius:8px; margin:1px;}
 .stExpanderHeader {background:#1E3A8A !important; border-radius:8px; padding:5px; color:#ffffff !important;}
 .stExpanderContent {background:#cce0ff !important; border-radius:8px; padding:10px; color:#000000;}
 label, .stTextInput label, .stNumberInput label {color:#ffffff !important; font-weight:700;}
@@ -150,6 +150,7 @@ if st.button("hidden sync", key="sync", help="skrýt") : db_save()
 if st.button("hidden search_btn", key="search_btn", help="skrýt") : st.session_state.show_search = not st.session_state.get("show_search", False)
 if st.button("hidden api_btn", key="api_btn", help="skrýt") : st.session_state.show_api_input = not st.session_state.show_api_input
 
+# -------- NADPIS A PODPŮRNÉ ELEMENTY --------
 st.markdown('<h1 class="app-title">Márova kuchařka</h1>', unsafe_allow_html=True)
 
 if st.session_state.show_api_input:
@@ -159,4 +160,4 @@ if "show_search" not in st.session_state:
     st.session_state.show_search = False
 search = st.text_input("Hledat recept") if st.session_state.show_search else ""
 
-# --- Zbytek kódu pro nové recepty, seznam receptů a export PDF je stejný ---
+# --- Zbytek kódu pro nové recepty, seznam receptů a export PDF zůstává beze změn ---
