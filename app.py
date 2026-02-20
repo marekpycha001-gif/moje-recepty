@@ -45,7 +45,7 @@ def load_db():
         if r.status_code==200:
             return [{"title":x.get("nazev","Bez názvu"),
                      "text":x.get("text",""),
-                     "fav":str(x.get("fav","")).lower()=="true"} for x in r.json()]
+                     "fav":False} for x in r.json()]
     except: pass
     return load_local()
 
@@ -54,7 +54,7 @@ def save_db():
         requests.delete(SDB_URL+"/all",timeout=3)
         requests.post(SDB_URL,json=[{
             "text":r["text"],
-            "fav":"true" if r["fav"] else "false",
+            "fav":"false",
             "nazev":r["title"]
         } for r in st.session_state.recipes],timeout=3)
     except: pass
@@ -73,7 +73,7 @@ body,[data-testid="stAppViewContainer"]{
  color:white;
 }
 
-/* top bar */
+/* TOP BAR */
 .topbar{
  display:flex;
  justify-content:center;
@@ -90,15 +90,9 @@ body,[data-testid="stAppViewContainer"]{
  border-radius:8px;
  font-size:18px;
  cursor:pointer;
- transition:.2s;
 }
 
-.topbtn:hover{
- transform:scale(1.12);
- background:#00bbff;
-}
-
-/* title */
+/* TITLE */
 .title{
  font-family:'Dancing Script',cursive;
  font-size:20px;
@@ -107,7 +101,7 @@ body,[data-testid="stAppViewContainer"]{
  margin-bottom:10px;
 }
 
-/* expander */
+/* EXPANDER */
 .stExpanderHeader{
  background:#1E3A8A !important;
  color:white !important;
@@ -118,12 +112,6 @@ body,[data-testid="stAppViewContainer"]{
  background:#cce0ff !important;
  color:black;
  border-radius:10px;
-}
-
-/* star */
-.star{
- font-size:22px;
- cursor:pointer;
 }
 </style>
 """,unsafe_allow_html=True)
@@ -193,22 +181,13 @@ if st.session_state.show_new:
             save_db()
             st.rerun()
 
-# ---------- SORT FAVORITES ----------
-recipes_sorted=sorted(st.session_state.recipes,key=lambda x: not x["fav"])
-
 # ---------- LIST ----------
-for i,r in enumerate(recipes_sorted):
+for i,r in enumerate(st.session_state.recipes):
 
     if search and search.lower() not in r["title"].lower():
         continue
 
     with st.expander(r["title"]):
-
-        star="⭐" if r["fav"] else "☆"
-        if st.button(star,key=f"fav{i}"):
-            r["fav"]=not r["fav"]
-            save_db()
-            st.rerun()
 
         nt=st.text_input("Název",r["title"],key=f"t{i}")
         tx=st.text_area("Text",r["text"],key=f"x{i}",height=250)
@@ -217,13 +196,13 @@ for i,r in enumerate(recipes_sorted):
 
         with c1:
             if st.button("💾 Uložit",key=f"s{i}"):
-                r["title"]=nt
-                r["text"]=tx
+                st.session_state.recipes[i]["title"]=nt
+                st.session_state.recipes[i]["text"]=tx
                 save_db()
                 st.rerun()
 
         with c2:
             if st.button("🗑 Smazat",key=f"d{i}"):
-                st.session_state.recipes.remove(r)
+                st.session_state.recipes.pop(i)
                 save_db()
                 st.rerun()
