@@ -51,7 +51,6 @@ def load_db():
 
 def save_db():
     try:
-        # ULOŽÍME POUZE aktuální stav receptů, nesmaže nic automaticky
         requests.post(SDB_URL,json=[{
             "text":r["text"],
             "fav":"true" if r["fav"] else "false",
@@ -73,7 +72,7 @@ body,[data-testid="stAppViewContainer"]{
  color:white;
 }
 
-/* TOP BAR */
+/* TOP BAR - FLEXBOX */
 .topbar{
  display:flex;
  justify-content:flex-start;
@@ -95,7 +94,7 @@ body,[data-testid="stAppViewContainer"]{
 /* TITLE */
 .title{
  font-family:'Dancing Script',cursive;
- font-size:15px;  /* zmenšeno o ~25% */
+ font-size:15px;  /* menší ~25% */
  text-align:center;
  color:#00ccff;
  margin-bottom:10px;
@@ -120,16 +119,29 @@ body,[data-testid="stAppViewContainer"]{
 </style>
 """,unsafe_allow_html=True)
 
-# ---------- TOP ICON BAR ----------
-c1,c2,c3,c4=st.columns([1,1,1,1])
-with c1: 
-    if st.button("➕"): st.session_state.show_new = not st.session_state.show_new
-with c2: 
-    if st.button("🔄"): save_db()
-with c3: 
-    if st.button("🔍"): st.session_state.show_search = not st.session_state.show_search
-with c4: 
-    if st.button("🔑"): st.session_state.show_api = not st.session_state.show_api
+# ---------- TOP ICON BAR (HTML FLEX) ----------
+st.markdown("""
+<div class="topbar">
+    <button class="topbtn" onclick="window.streamlitWebsocketSend({'event':'btn','value':'new'})">➕</button>
+    <button class="topbtn" onclick="window.streamlitWebsocketSend({'event':'btn','value':'sync'})">🔄</button>
+    <button class="topbtn" onclick="window.streamlitWebsocketSend({'event':'btn','value':'search'})">🔍</button>
+    <button class="topbtn" onclick="window.streamlitWebsocketSend({'event':'btn','value':'api'})">🔑</button>
+</div>
+""",unsafe_allow_html=True)
+
+clicked=st.session_state.get("clicked","")
+# ---------- JS BUTTONS HANDLER ----------
+if "btn_clicked" not in st.session_state:
+    st.session_state["btn_clicked"]=""
+if st.session_state["btn_clicked"]:
+    clicked=st.session_state["btn_clicked"]
+    st.session_state["btn_clicked"]=""
+
+# ---------- ACTIONS ----------
+if clicked=="new": st.session_state.show_new = not st.session_state.show_new
+if clicked=="search": st.session_state.show_search = not st.session_state.show_search
+if clicked=="api": st.session_state.show_api = not st.session_state.show_api
+if clicked=="sync": save_db()
 
 # ---------- TITLE ----------
 st.markdown('<div class="title">Márova kuchařka</div>',unsafe_allow_html=True)
