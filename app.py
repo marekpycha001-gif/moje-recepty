@@ -12,7 +12,7 @@ st.set_page_config(page_title="Márova kuchařka", page_icon="🍳", layout="wid
 SDB_URL = "https://sheetdb.io/api/v1/5ygnspqc90f9d"
 LOCAL_FILE = "recipes.json"
 
-# ---------- STAVOVÉ PROMĚNNÉ ----------
+# ---------- STAV ----------
 if "show_api_input" not in st.session_state:
     st.session_state.show_api_input = False
 if "api_key" not in st.session_state:
@@ -101,7 +101,7 @@ def scale_recipe(text):
         return str(round(num))
     return re.sub(r"\d+(\.\d+)?", repl, text)
 
-# ---------- NAČTENÍ RECEPTŮ ----------
+# ---------- NAČTENÍ ----------
 if not st.session_state.recipes:
     st.session_state.recipes = load_recipes()
 
@@ -120,21 +120,16 @@ label, .stTextInput label, .stNumberInput label {color:#ffffff !important; font-
 </style>
 """, unsafe_allow_html=True)
 
-# ---------- IKONY NAD NADPISEM ----------
-st.markdown("""
-<div class="icon-row">
-    <button onclick="document.querySelector('#new_rec').click()">➕</button>
-    <button onclick="document.querySelector('#sync').click()">🔄</button>
-    <button onclick="document.querySelector('#search_btn').click()">🔍</button>
-    <button onclick="document.querySelector('#api_btn').click()">🔑</button>
-</div>
-""", unsafe_allow_html=True)
-
-# Skrytá tlačítka pro JS onclick
-if st.button("hidden new_rec", key="new_rec"): st.session_state.show_new_recipe = not st.session_state.show_new_recipe
-if st.button("hidden sync", key="sync"): db_save()
-if st.button("hidden search_btn", key="search_btn"): st.session_state.show_search = not st.session_state.show_search
-if st.button("hidden api_btn", key="api_btn"): st.session_state.show_api_input = not st.session_state.show_api_input
+# ---------- IKONY NAHORU ----------
+col1, col2, col3, col4 = st.columns([1,1,1,1])
+with col1: 
+    if st.button("➕"): st.session_state.show_new_recipe = not st.session_state.show_new_recipe
+with col2: 
+    if st.button("🔄"): db_save()
+with col3: 
+    if st.button("🔍"): st.session_state.show_search = not st.session_state.show_search
+with col4: 
+    if st.button("🔑"): st.session_state.show_api_input = not st.session_state.show_api_input
 
 # ---------- NADPIS ----------
 st.markdown('<h1 class="app-title">Márova kuchařka</h1>', unsafe_allow_html=True)
@@ -146,26 +141,27 @@ if st.session_state.show_api_input:
 # ---------- VYHLEDÁVÁNÍ ----------
 search = st.text_input("Hledat recept") if st.session_state.show_search else ""
 
-# ---------- NOVÝ RECEPT (TEXT / FOTO) ----------
-t1, t2 = st.tabs(["Text", "Foto"])
-with t1:
-    with st.form("t_form", clear_on_submit=True):
-        u = st.text_area("Vložit text:")
-        title = st.text_input("Název receptu")
-        if st.form_submit_button("Čimilali"):
-            if u:
-                r_t = analyze(u)
-                st.session_state.recipes.insert(0, {"title": title or "Bez názvu", "text": r_t, "fav": False, "img": ""})
-                db_save()
-                st.experimental_rerun()
-with t2:
-    f = st.file_uploader("Foto", type=["jpg", "png"])
-    title2 = st.text_input("Název receptu (foto)")
-    if f and st.button("Čimilali", key="c2"):
-        r_t = analyze(Image.open(f))
-        st.session_state.recipes.insert(0, {"title": title2 or "Bez názvu", "text": r_t, "fav": False, "img": ""})
-        db_save()
-        st.experimental_rerun()
+# ---------- FORMULÁŘ PRO NOVÝ RECEPT (SCHOVANÝ POD +) ----------
+if st.session_state.show_new_recipe:
+    t1, t2 = st.tabs(["Text", "Foto"])
+    with t1:
+        with st.form("t_form", clear_on_submit=True):
+            u = st.text_area("Vložit text:")
+            title = st.text_input("Název receptu")
+            if st.form_submit_button("Čimilali"):
+                if u:
+                    r_t = analyze(u)
+                    st.session_state.recipes.insert(0, {"title": title or "Bez názvu", "text": r_t, "fav": False, "img": ""})
+                    db_save()
+                    st.experimental_rerun()
+    with t2:
+        f = st.file_uploader("Foto", type=["jpg", "png"])
+        title2 = st.text_input("Název receptu (foto)")
+        if f and st.button("Čimilali", key="c2"):
+            r_t = analyze(Image.open(f))
+            st.session_state.recipes.insert(0, {"title": title2 or "Bez názvu", "text": r_t, "fav": False, "img": ""})
+            db_save()
+            st.experimental_rerun()
 
 # ---------- ZOBRAZENÍ RECEPTŮ ----------
 for i, r in enumerate(st.session_state.recipes):
