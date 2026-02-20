@@ -39,7 +39,6 @@ def load_local():
 # ---------- LOAD ----------
 def load_recipes():
     recipes = []
-    # nejprve z cloudu
     try:
         r = requests.get(SDB_URL, timeout=3)
         if r.status_code == 200:
@@ -53,12 +52,10 @@ def load_recipes():
             ]
     except:
         pass
-    # fallback do local
     if not recipes:
         recipes = load_local()
-        # zajistíme, že všechny mají title
         for r in recipes:
-            if not r.get("title"):
+            if not r.get("title") or r["title"].strip() == "":
                 r["title"] = "Bez názvu"
     return recipes
 
@@ -67,9 +64,8 @@ if "recipes" not in st.session_state:
 
 # ---------- SAVE ----------
 def db_save():
-    # u všech receptů zajistíme title
     for r in st.session_state.recipes:
-        if not r.get("title"):
+        if not r.get("title") or r["title"].strip() == "":
             r["title"] = "Bez názvu"
     try:
         requests.delete(SDB_URL + "/all", timeout=3)
@@ -99,7 +95,8 @@ def sync_online():
 def scale_recipe(text, factor):
     def repl(match):
         num = float(match.group())
-        return str(round(num * factor, 2))
+        scaled = round(num * factor)
+        return str(scaled)
     return re.sub(r"\d+(\.\d+)?", repl, text)
 
 # ---------- PDF ----------
@@ -136,31 +133,29 @@ api = st.sidebar.text_input("API klíč", type="password")
 if api:
     tab1, tab2 = st.tabs(["Text", "Foto"])
 
-    # ---------- TEXT ----------
     with tab1:
         title_input = st.text_input("Název receptu")
         text_input = st.text_area("Vložit text")
         submit_text = st.button("Čimilali")
-        if submit_text:
-            if text_input.strip():
-                # Vždy vezme aktuální vstup z formuláře
-                generated_text = analyze(text_input.strip(), api)
-                st.session_state.recipes.insert(0, {
-                    "title": title_input.strip() or "Bez názvu",
-                    "text": generated_text,
-                    "fav": False
-                })
-                db_save()
+        if submit_text and text_input.strip():
+            generated_text = analyze(text_input.strip(), api)
+            new_title = title_input.strip() or "Bez názvu"
+            st.session_state.recipes.insert(0, {
+                "title": new_title,
+                "text": generated_text,
+                "fav": False
+            })
+            db_save()
 
-    # ---------- FOTO ----------
     with tab2:
         f = st.file_uploader("Foto", type=["jpg", "png"])
         title_input_photo = st.text_input("Název receptu (pro foto)")
         submit_photo = st.button("Čimilali foto")
         if f and submit_photo:
             generated_text = analyze(Image.open(f), api)
+            new_title = title_input_photo.strip() or "Bez názvu"
             st.session_state.recipes.insert(0, {
-                "title": title_input_photo.strip() or "Bez názvu",
+                "title": new_title,
                 "text": generated_text,
                 "fav": False
             })
@@ -180,7 +175,7 @@ for i, r in enumerate(list(st.session_state.recipes)):
 
         c1, c2, c3 = st.columns(3)
         if c1.button("💾 Uložit", key=f"s{i}"):
-            st.session_state.recipes[i]["title"] = title_edit
+            st.session_state.recipes[i]["title"] = title_edit.strip() or "Bez názvu"
             st.session_state.recipes[i]["text"] = edited
             db_save()
 
