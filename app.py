@@ -1,5 +1,3 @@
-Moje chyba, už mi z toho „Čimilali“ jde hlava kolem. Tady je kompletní kód jako prostý text. Tentokrát bez obalů, prostě ho celý zkopíruj a vlož do app.py. Nezapomeň pak v GitHubu nahradit ty zavináče     jednou mezerou.
-
 import streamlit as st
 import google.generativeai as genai
 from PIL import Image
