@@ -110,7 +110,7 @@ def scale_recipe(text, factor):
 # -------- PDF EXPORT --------
 def export_pdf():
     try:
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Preformatted, Image as RLImage
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Preformatted
         from reportlab.lib.pagesizes import letter
         from reportlab.lib.styles import getSampleStyleSheet
         buffer = BytesIO()
@@ -136,15 +136,15 @@ body, [data-testid="stAppViewContainer"] {
     color: #ffffff;
 }
 h1 {font-family: 'Roboto', sans-serif; font-size:18px; color:#00ccff; font-weight:700; margin:0px; display:inline;}
-div.stButton > button {height:45px; font-size:16px; background:#0099ff; color:white; border-radius:8px; margin:3px;}
+div.stButton > button {height:35px; font-size:16px; background:#0099ff; color:white; border-radius:8px; margin:1px;}
 textarea, input[type=text], input[type=number] {font-size:16px; padding:5px; color:#000;}
 .stExpanderHeader {background:#001f3f; border-radius:8px; padding:5px; color:#00ccff;}
 .stTextInput>div>div>input {background:#e6f0ff; color:#000; border-radius:5px; padding:5px;}
 </style>
 """, unsafe_allow_html=True)
 
-# -------- HORNÍ PANEL (název + ikony vedle sebe) --------
-cols = st.columns([4,0.3,0.3,0.3])
+# -------- HORNÍ PANEL (název + ikonky natěsnané) --------
+cols = st.columns([4,0.5,0.5,0.5])
 with cols[0]:
     st.markdown("<h1>Márova kuchařka 🌌</h1>", unsafe_allow_html=True)
 with cols[1]:
@@ -166,7 +166,6 @@ search = st.text_input("Hledat recept") if st.session_state.show_search else ""
 if st.session_state.api_key and st.session_state.get("show_new_recipe", False):
     tab1, tab2 = st.tabs(["Text", "Foto"])
 
-    # --- Text ---
     with tab1:
         if "new_title_text" not in st.session_state:
             st.session_state.new_title_text = ""
@@ -180,7 +179,6 @@ if st.session_state.api_key and st.session_state.get("show_new_recipe", False):
                 db_save()
                 st.session_state.new_title_text = ""
 
-    # --- Foto ---
     with tab2:
         if "new_title_photo" not in st.session_state:
             st.session_state.new_title_photo = ""
