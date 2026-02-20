@@ -3,81 +3,111 @@ import google.generativeai as genai
 from PIL import Image
 import requests
 
-CODE = """
-import streamlit as st
-import google.generativeai as genai
-from PIL import Image
-import requests
-
 st.set_page_config(page_title="Moje Recepty", page_icon="🍳")
-SDB_URL = ""
+
+# TVOJE SHEETDB API URL
+SDB_URL = "https://sheetdb.io/api/v1/5ygnspqc90f9d"
+
 
 def analyze(content, api_key):
-XXXtry:
-XXXXXXgenai.configure(api_key=api_key)
-XXXXXXmodels = [m.name for m in genai.list_models() if "generateContent" in m.supported_generation_methods]
-XXXXXXm_name = next((m for m in models if "flash" in m), models[0])
-XXXXXXmodel = genai.GenerativeModel(m_name)
-XXXXXXp = "Jsi expert na vareni. Format: NAZEV: [Nazev], INGREDIENCE: - [surovina], POSTUP: 1. [Krok]"
-XXXXXXres = model.generate_content([p, content])
-XXXXXXreturn res.text
-XXXexcept Exception as e: return str(e)
+    try:
+        genai.configure(api_key=api_key)
+        models = [m.name for m in genai.list_models() if "generateContent" in m.supported_generation_methods]
+        m_name = next((m for m in models if "flash" in m), models[0])
+        model = genai.GenerativeModel(m_name)
 
+        prompt = "Jsi expert na vareni. Format: NAZEV: [Nazev], INGREDIENCE: - [surovina], POSTUP: 1. [Krok]"
+        res = model.generate_content([prompt, content])
+        return res.text
+
+    except Exception as e:
+        return str(e)
+
+
+# Načtení receptů z databáze při startu
 if "recipes" not in st.session_state:
-XXXtry:
-XXXXXXr = requests.get(SDB_URL, timeout=5)
-XXXXXXif r.status_code == 200:
-XXXXXXXXXst.session_state.recipes = [{"text": x.get("text", ""), "fav": str(x.get("fav", "")).lower() == "true"} for x in r.json()]
-XXXXXXelse: st.session_state.recipes = []
-XXXexcept: st.session_state.recipes = []
+    try:
+        r = requests.get(SDB_URL, timeout=5)
+        if r.status_code == 200:
+            st.session_state.recipes = [
+                {
+                    "text": x.get("text", ""),
+                    "fav": str(x.get("fav", "")).lower() == "true"
+                }
+                for x in r.json()
+            ]
+        else:
+            st.session_state.recipes = []
+    except:
+        st.session_state.recipes = []
 
+
+# Uložení do databáze
 def db_save():
-XXXtry:
-XXXXXXst.toast("Zkousim ulozit...")
-XXXXXXrequests.delete(SDB_URL + "/all")
-XXXXXXif st.session_state.recipes:
-XXXXXXXXXdata = [{"text": r["text"], "fav": str(r["fav"]).lower()} for r in st.session_state.recipes]
-XXXXXXXXXpost_res = requests.post(SDB_URL, json={"data": data})
-XXXXXXXXXif post_res.status_code == 201:
-XXXXXXXXXXXXst.toast("Hotovo! Ulozeno ✅")
-XXXXXXXXXelse:
-XXXXXXXXXXXXst.error(f"Chyba SheetDB: {post_res.text}")
-XXXexcept Exception as e: st.error(f"Chyba spojeni: {e}")
+    try:
+        st.toast("Ukládám...")
+        if st.session_state.recipes:
+            data = [
+                {"text": r["text"], "fav": "true" if r["fav"] else "false"}
+                for r in st.session_state.recipes
+            ]
 
-st.title("🍳 Muj chytry receptar")
+            res = requests.post(SDB_URL, json=data)
 
-if st.sidebar.button("🚨 NATVRDO ULOZIT TEST"):
-XXXst.session_state.recipes.insert(0, {"text": "NAZEV: Test", "fav": True})
-XXXdb_save()
-XXXst.rerun()
+            if res.status_code in (200, 201):
+                st.toast("Uloženo ✅")
+            else:
+                st.error(res.text)
 
-api = st.sidebar.text_input("API klic", type="password")
+    except Exception as e:
+        st.error(f"Chyba spojení: {e}")
+
+
+st.title("🍳 Můj chytrý receptář")
+
+# TEST tlačítko
+if st.sidebar.button("🚨 NATVRDO ULOŽIT TEST"):
+    st.session_state.recipes.insert(0, {"text": "NAZEV: Test", "fav": True})
+    db_save()
+    st.rerun()
+
+
+# API klíč
+api = st.sidebar.text_input("API klíč", type="password")
 
 if api:
-XXXt1, t2 = st.tabs(["Text", "Foto"])
-XXXwith t1:
-XXXXXXwith st.form("t_form", clear_on_submit=True):
-XXXXXXXXXu = st.text_area("Vlozit text:")
-XXXXXXXXXif st.form_submit_button("Cimilali"):
-XXXXXXXXXXXXif u:
-XXXXXXXXXXXXXXXr_t = analyze(u, api)
-XXXXXXXXXXXXXXXst.session_state.recipes.insert(0, {"text": r_t, "fav": False})
-XXXXXXXXXXXXXXXdb_save()
-XXXXXXXXXXXXXXXst.rerun()
-XXXwith t2:
-XXXXXXf = st.file_uploader("Foto", type=["jpg", "png"])
-XXXXXXif f and st.button("Cimilali", key="c2"):
-XXXXXXXXXr_t = analyze(Image.open(f), api)
-XXXXXXXXXst.session_state.recipes.insert(0, {"text": r_t, "fav": False})
-XXXXXXXXXdb_save()
-XXXXXXXXXst.rerun()
 
+    tab1, tab2 = st.tabs(["Text", "Foto"])
+
+    # TEXT INPUT
+    with tab1:
+        with st.form("t_form", clear_on_submit=True):
+            u = st.text_area("Vložit text:")
+
+            if st.form_submit_button("Vytvořit recept"):
+                if u:
+                    r_t = analyze(u, api)
+                    st.session_state.recipes.insert(0, {"text": r_t, "fav": False})
+                    db_save()
+                    st.rerun()
+
+    # FOTO INPUT
+    with tab2:
+        f = st.file_uploader("Foto", type=["jpg", "png"])
+
+        if f and st.button("Vytvořit recept", key="c2"):
+            r_t = analyze(Image.open(f), api)
+            st.session_state.recipes.insert(0, {"text": r_t, "fav": False})
+            db_save()
+            st.rerun()
+
+
+# Výpis receptů
 for i, r in enumerate(st.session_state.recipes):
-XXXwith st.expander(f"Recept {i+1}"):
-XXXXXXst.write(r["text"])
-XXXXXXif st.button("Smazat", key=f"d_{i}"):
-XXXXXXXXXst.session_state.recipes.pop(i)
-XXXXXXXXXdb_save()
-XXXXXXXXXst.rerun()
-"""
-exec(CODE.replace("XXX", "    "))
+    with st.expander(f"Recept {i+1}"):
+        st.write(r["text"])
+
+        if st.button("Smazat", key=f"d_{i}"):
+            st.session_state.recipes.pop(i)
+            db_save()
+            st.rerun()
