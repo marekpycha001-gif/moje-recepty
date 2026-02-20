@@ -78,19 +78,6 @@ def db_save():
         pass
     save_local(st.session_state.recipes)
 
-# ---------- SYNC ----------
-def sync_online():
-    try:
-        requests.delete(SDB_URL + "/all", timeout=3)
-        requests.post(
-            SDB_URL,
-            json=[{"title": r["title"], "text": r["text"], "fav": "true" if r["fav"] else "false"} for r in st.session_state.recipes],
-            timeout=3,
-        )
-        st.success("Synchronizováno s cloudem ✅")
-    except:
-        st.error("Nelze se připojit k internetu")
-
 # ---------- SCALE ----------
 def scale_recipe(text, factor):
     def repl(match):
@@ -126,40 +113,51 @@ search = st.text_input("🔎 Hledat recept")
 colA, colB = st.columns([3, 1])
 with colB:
     if st.button("🔄 Synchronizovat"):
-        sync_online()
+        db_save()
+        st.success("Synchronizováno ✅")
 
 api = st.sidebar.text_input("API klíč", type="password")
 
+# ---------- CREATE RECIPE ----------
 if api:
     tab1, tab2 = st.tabs(["Text", "Foto"])
 
+    # Text
     with tab1:
-        title_input = st.text_input("Název receptu")
-        text_input = st.text_area("Vložit text")
-        submit_text = st.button("Čimilali")
-        if submit_text and text_input.strip():
-            generated_text = analyze(text_input.strip(), api)
-            new_title = title_input.strip() or "Bez názvu"
-            st.session_state.recipes.insert(0, {
-                "title": new_title,
-                "text": generated_text,
-                "fav": False
-            })
-            db_save()
+        if "new_title_text" not in st.session_state:
+            st.session_state.new_title_text = ""
+        st.session_state.new_title_text = st.text_input("Název receptu", value=st.session_state.new_title_text)
+        new_text = st.text_area("Vložit text")
+        if st.button("Čimilali"):
+            if new_text.strip():
+                generated = analyze(new_text.strip(), api)
+                title_final = st.session_state.new_title_text.strip() or "Bez názvu"
+                st.session_state.recipes.insert(0, {
+                    "title": title_final,
+                    "text": generated,
+                    "fav": False
+                })
+                db_save()
+                st.session_state.new_title_text = ""  # vyčistit po uložení
+                st.experimental_rerun()
 
+    # Foto
     with tab2:
+        if "new_title_photo" not in st.session_state:
+            st.session_state.new_title_photo = ""
+        st.session_state.new_title_photo = st.text_input("Název receptu (pro foto)", value=st.session_state.new_title_photo)
         f = st.file_uploader("Foto", type=["jpg", "png"])
-        title_input_photo = st.text_input("Název receptu (pro foto)")
-        submit_photo = st.button("Čimilali foto")
-        if f and submit_photo:
-            generated_text = analyze(Image.open(f), api)
-            new_title = title_input_photo.strip() or "Bez názvu"
+        if f and st.button("Čimilali foto"):
+            generated = analyze(Image.open(f), api)
+            title_final = st.session_state.new_title_photo.strip() or "Bez názvu"
             st.session_state.recipes.insert(0, {
-                "title": new_title,
-                "text": generated_text,
+                "title": title_final,
+                "text": generated,
                 "fav": False
             })
             db_save()
+            st.session_state.new_title_photo = ""
+            st.experimental_rerun()
 
 # ---------- LIST ----------
 for i, r in enumerate(list(st.session_state.recipes)):
@@ -178,6 +176,7 @@ for i, r in enumerate(list(st.session_state.recipes)):
             st.session_state.recipes[i]["title"] = title_edit.strip() or "Bez názvu"
             st.session_state.recipes[i]["text"] = edited
             db_save()
+            st.experimental_rerun()
 
         if c2.button("⭐ Oblíbený", key=f"f{i}"):
             st.session_state.recipes[i]["fav"] = not st.session_state.recipes[i]["fav"]
@@ -186,6 +185,7 @@ for i, r in enumerate(list(st.session_state.recipes)):
         if c3.button("🗑 Smazat", key=f"d{i}"):
             st.session_state.recipes.pop(i)
             db_save()
+            st.experimental_rerun()
 
 # ---------- EXPORT ----------
 st.divider()
