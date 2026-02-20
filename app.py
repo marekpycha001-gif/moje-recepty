@@ -14,7 +14,8 @@ defaults={
     "recipes":[],
     "show_new":False,
     "show_search":False,
-    "show_api":False
+    "show_api":False,
+    "fav_only":False
 }
 for k,v in defaults.items():
     if k not in st.session_state:
@@ -43,9 +44,11 @@ def load_db():
     try:
         r=requests.get(SDB_URL,timeout=3)
         if r.status_code==200:
-            return [{"title":x.get("nazev","Bez názvu"),
-                     "text":x.get("text",""),
-                     "fav":str(x.get("fav","")).lower()=="true"} for x in r.json()]
+            return [{
+                "title":x.get("nazev","Bez názvu"),
+                "text":x.get("text",""),
+                "fav":str(x.get("fav","")).lower()=="true"
+            } for x in r.json()]
     except: pass
     return load_local()
 
@@ -73,7 +76,6 @@ body,[data-testid="stAppViewContainer"]{
  color:white;
 }
 
-/* top bar */
 .topbar{
  display:flex;
  justify-content:center;
@@ -88,7 +90,7 @@ body,[data-testid="stAppViewContainer"]{
  border:none;
  padding:6px 10px;
  border-radius:8px;
- font-size:18px;
+ font-size:17px;
  cursor:pointer;
  transition:.2s;
 }
@@ -98,7 +100,6 @@ body,[data-testid="stAppViewContainer"]{
  background:#00bbff;
 }
 
-/* title */
 .title{
  font-family:'Dancing Script',cursive;
  font-size:20px;
@@ -107,7 +108,6 @@ body,[data-testid="stAppViewContainer"]{
  margin-bottom:10px;
 }
 
-/* expander */
 .stExpanderHeader{
  background:#1E3A8A !important;
  color:white !important;
@@ -119,23 +119,18 @@ body,[data-testid="stAppViewContainer"]{
  color:black;
  border-radius:10px;
 }
-
-/* star */
-.star{
- font-size:22px;
- cursor:pointer;
-}
 </style>
 """,unsafe_allow_html=True)
 
-# ---------- TOP ICON BAR ----------
+# ---------- TOP BAR ----------
 clicked=st.query_params.get("btn","")
 
-st.markdown(f"""
+st.markdown("""
 <div class="topbar">
 <a href="?btn=new"><button class="topbtn">➕</button></a>
 <a href="?btn=sync"><button class="topbtn">🔄</button></a>
 <a href="?btn=search"><button class="topbtn">🔍</button></a>
+<a href="?btn=fav"><button class="topbtn">⭐</button></a>
 <a href="?btn=api"><button class="topbtn">🔑</button></a>
 </div>
 """,unsafe_allow_html=True)
@@ -143,12 +138,18 @@ st.markdown(f"""
 # ---------- ACTIONS ----------
 if clicked=="new":
     st.session_state.show_new=not st.session_state.show_new
+
 if clicked=="search":
     st.session_state.show_search=not st.session_state.show_search
+
 if clicked=="api":
     st.session_state.show_api=not st.session_state.show_api
+
 if clicked=="sync":
     save_db()
+
+if clicked=="fav":
+    st.session_state.fav_only=not st.session_state.fav_only
 
 # ---------- TITLE ----------
 st.markdown('<div class="title">Márova kuchařka</div>',unsafe_allow_html=True)
@@ -160,7 +161,7 @@ if st.session_state.show_api:
 # ---------- SEARCH ----------
 search=""
 if st.session_state.show_search:
-    search=st.text_input("Hledat recept")
+    search=st.text_input("Hledat recept nebo ingredienci")
 
 # ---------- NEW ----------
 if st.session_state.show_new:
@@ -193,14 +194,18 @@ if st.session_state.show_new:
             save_db()
             st.rerun()
 
-# ---------- SORT FAVORITES ----------
-recipes_sorted=sorted(st.session_state.recipes,key=lambda x: not x["fav"])
+# ---------- FILTER ----------
+recipes=sorted(st.session_state.recipes,key=lambda x: not x["fav"])
 
 # ---------- LIST ----------
-for i,r in enumerate(recipes_sorted):
+for i,r in enumerate(recipes):
 
-    if search and search.lower() not in r["title"].lower():
+    if st.session_state.fav_only and not r["fav"]:
         continue
+
+    if search:
+        if search.lower() not in (r["title"]+" "+r["text"]).lower():
+            continue
 
     with st.expander(r["title"]):
 
