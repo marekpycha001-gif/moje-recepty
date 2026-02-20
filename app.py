@@ -128,15 +128,24 @@ if api:
             submit_btn = st.form_submit_button("Čimilali")
             if submit_btn and text_input:
                 generated_text = analyze(text_input, api)
-                st.session_state.recipes.insert(0, {"title": title_input, "text": generated_text, "fav": False})
+                st.session_state.recipes.insert(0, {
+                    "title": title_input if title_input.strip() else "Bez názvu",
+                    "text": generated_text,
+                    "fav": False
+                })
                 db_save()
 
     # ---------- FOTO ----------
     with tab2:
         f = st.file_uploader("Foto", type=["jpg", "png"])
-        if f and st.button("Čimilali"):
+        title_input = st.text_input("Název receptu (pro foto)")
+        if f and st.button("Čimilali foto"):
             generated_text = analyze(Image.open(f), api)
-            st.session_state.recipes.insert(0, {"title": "", "text": generated_text, "fav": False})
+            st.session_state.recipes.insert(0, {
+                "title": title_input if title_input.strip() else "Bez názvu",
+                "text": generated_text,
+                "fav": False
+            })
             db_save()
 
 # ---------- LIST ----------
@@ -144,8 +153,7 @@ for i, r in enumerate(list(st.session_state.recipes)):
     if search and search.lower() not in r["text"].lower() and search.lower() not in r["title"].lower():
         continue
 
-    with st.expander(f"{'⭐ ' if r['fav'] else ''}{r['title'] or 'Recept ' + str(i+1)}"):
-
+    with st.expander(f"{'⭐ ' if r['fav'] else ''}{r['title']}"):
         factor = st.number_input("Násobek porcí", 0.1, 10.0, 1.0, 0.1, key=f"scale{i}")
         scaled = scale_recipe(r["text"], factor)
 
