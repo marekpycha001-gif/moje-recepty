@@ -137,7 +137,7 @@ def export_pdf():
     except:
         return None
 
-# -------- CSS PRO HVĚZDNÉ POZADÍ --------
+# -------- CSS PRO HVĚZDNÉ POZADÍ + STYL --------
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
@@ -146,65 +146,73 @@ body, [data-testid="stAppViewContainer"] {
     background: radial-gradient(ellipse at bottom, #000428 0%, #004e92 100%);
     color: #ffffff;
 }
-h1 {font-family: 'Roboto', sans-serif; font-size:26px; color:#00ccff; font-weight:700; margin-bottom:10px;}
-div.stButton > button {height:50px; width:100%; font-size:16px; background:#0099ff; color:white; border-radius:8px; margin:5px 0;}
+
+h1 {font-family: 'Roboto', sans-serif; font-size:22px; color:#00ccff; font-weight:700; margin-bottom:10px;}
+div.stButton > button {height:45px; width:100%; font-size:16px; background:#0099ff; color:white; border-radius:8px; margin:3px 0;}
 textarea, input[type=text], input[type=number] {font-size:16px; padding:5px; color:#000;}
 .stExpanderHeader {background:#001f3f; border-radius:8px; padding:5px; color:#00ccff;}
 .stTextInput>div>div>input {background:#e6f0ff; color:#000; border-radius:5px; padding:5px;}
 </style>
 """, unsafe_allow_html=True)
 
-st.title("Márova kuchařka 🌌")
+# -------- HORNÍ PANEL (název + lupa + sync) --------
+title_col, search_col, sync_col = st.columns([4,1,1])
+with title_col:
+    st.markdown("<h1>Márova kuchařka 🌌</h1>", unsafe_allow_html=True)
+with search_col:
+    if st.button("🔍"):
+        if "show_search" not in st.session_state:
+            st.session_state.show_search = True
+        else:
+            st.session_state.show_search = not st.session_state.show_search
+with sync_col:
+    if st.button("🔄"):
+        db_save()
+        st.success("Synchronizováno ✅")
 
-# -------- MINI SEARCH --------
 if "show_search" not in st.session_state:
     st.session_state.show_search = False
-
-search_col, sync_col = st.columns([0.15, 0.15])
-if search_col.button("🔍"):
-    st.session_state.show_search = not st.session_state.show_search
-if sync_col.button("🔄"):
-    db_save()
-    st.success("Synchronizováno ✅")
 
 if st.session_state.show_search:
     search = st.text_input("Hledat recept")
 else:
     search = ""
 
-# -------- CREATE RECIPE --------
+# -------- NOVÝ RECEPT - SCHOVANÝ FORMULÁŘ --------
 if st.session_state.api_key:
-    tab1, tab2 = st.tabs(["Text", "Foto"])
+    new_recipe_expander = st.expander("➕ Přidat nový recept")
+    with new_recipe_expander:
+        tab1, tab2 = st.tabs(["Text", "Foto"])
 
-    # --- Text ---
-    with tab1:
-        if "new_title_text" not in st.session_state:
-            st.session_state.new_title_text = ""
-        st.session_state.new_title_text = st.text_input("Název receptu", value=st.session_state.new_title_text)
-        new_text = st.text_area("Vložit text", height=200)
-        if st.button("Čimilali"):
-            if new_text.strip():
-                generated = analyze(new_text.strip())
-                title_final = st.session_state.new_title_text.strip() or "Bez názvu"
-                st.session_state.recipes.insert(0, {"title": title_final, "text": generated, "fav": False, "img": ""})
-                db_save()
+        # --- Text ---
+        with tab1:
+            if "new_title_text" not in st.session_state:
                 st.session_state.new_title_text = ""
+            st.session_state.new_title_text = st.text_input("Název receptu", value=st.session_state.new_title_text)
+            new_text = st.text_area("Vložit text", height=200)
+            if st.button("Čimilali"):
+                if new_text.strip():
+                    generated = analyze(new_text.strip())
+                    title_final = st.session_state.new_title_text.strip() or "Bez názvu"
+                    st.session_state.recipes.insert(0, {"title": title_final, "text": generated, "fav": False, "img": ""})
+                    db_save()
+                    st.session_state.new_title_text = ""
 
-    # --- Foto ---
-    with tab2:
-        if "new_title_photo" not in st.session_state:
-            st.session_state.new_title_photo = ""
-        st.session_state.new_title_photo = st.text_input("Název receptu (pro foto)", value=st.session_state.new_title_photo)
-        f = st.file_uploader("Foto", type=["jpg", "png"])
-        if f and st.button("Čimilali foto"):
-            generated = analyze(Image.open(f))
-            buffered = BytesIO()
-            Image.open(f).save(buffered, format="PNG")
-            img_base64 = base64.b64encode(buffered.getvalue()).decode()
-            title_final = st.session_state.new_title_photo.strip() or "Bez názvu"
-            st.session_state.recipes.insert(0, {"title": title_final, "text": generated, "fav": False, "img": img_base64})
-            db_save()
-            st.session_state.new_title_photo = ""
+        # --- Foto ---
+        with tab2:
+            if "new_title_photo" not in st.session_state:
+                st.session_state.new_title_photo = ""
+            st.session_state.new_title_photo = st.text_input("Název receptu (pro foto)", value=st.session_state.new_title_photo)
+            f = st.file_uploader("Foto", type=["jpg", "png"])
+            if f and st.button("Čimilali foto"):
+                generated = analyze(Image.open(f))
+                buffered = BytesIO()
+                Image.open(f).save(buffered, format="PNG")
+                img_base64 = base64.b64encode(buffered.getvalue()).decode()
+                title_final = st.session_state.new_title_photo.strip() or "Bez názvu"
+                st.session_state.recipes.insert(0, {"title": title_final, "text": generated, "fav": False, "img": img_base64})
+                db_save()
+                st.session_state.new_title_photo = ""
 
 # -------- LIST RECIPES --------
 for i, r in enumerate(list(st.session_state.recipes)):
