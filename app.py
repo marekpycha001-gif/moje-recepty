@@ -44,7 +44,7 @@ def load_recipes():
         if r.status_code == 200:
             recipes = [
                 {
-                    "title": x.get("title", "").strip() or "Bez názvu",
+                    "title": x.get("nazev", "").strip() or "Bez názvu",
                     "text": x.get("text", "").strip(),
                     "fav": str(x.get("fav", "")).lower() == "true"
                 }
@@ -71,7 +71,7 @@ def db_save():
         requests.delete(SDB_URL + "/all", timeout=3)
         requests.post(
             SDB_URL,
-            json=[{"title": r["title"], "text": r["text"], "fav": "true" if r["fav"] else "false"} for r in st.session_state.recipes],
+            json=[{"text": r["text"], "fav": "true" if r["fav"] else "false", "nazev": r["title"]} for r in st.session_state.recipes],
             timeout=3,
         )
     except:
@@ -173,7 +173,7 @@ for i, r in enumerate(list(st.session_state.recipes)):
         if c1.button("💾 Uložit", key=f"s{i}"):
             st.session_state.recipes[i]["title"] = title_edit.strip() or "Bez názvu"
             st.session_state.recipes[i]["text"] = edited
-            db_save()
+            db_save()  # uloží title do sloupce 'nazev'
 
         if c2.button("⭐ Oblíbený", key=f"f{i}"):
             st.session_state.recipes[i]["fav"] = not st.session_state.recipes[i]["fav"]
