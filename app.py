@@ -5,7 +5,6 @@ from PIL import Image
 import requests
 
 st.set_page_config(page_title="Moje Recepty", page_icon="🍳")
-
 SDB_URL = ""
 
 if "recipes" not in st.session_state:
@@ -30,9 +29,7 @@ XXXexcept: pass
 def analyze(content, api_key):
 XXXtry:
 XXXXXXgenai.configure(api_key=api_key)
-XXXXXXmodels = [m.name for m in genai.list_models() if "generateContent" in m.supported_generation_methods]
-XXXXXXm_name = next((m for m in models if "flash" in m), models[0])
-XXXXXXmodel = genai.GenerativeModel(m_name)
+XXXXXXmodel = genai.GenerativeModel("gemini-1.5-flash")
 XXXXXXp = "Jsi expert na vareni. Vsechny miry dej na gramy (g). Format: NAZEV: [Nazev], INGREDIENCE: - [cislo] [jednotka] [surovina], POSTUP: 1. [Krok]"
 XXXXXXwith st.spinner("Cimilali maka..."):
 XXXXXXXXXres = model.generate_content([p, content])
