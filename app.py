@@ -15,13 +15,10 @@ SDB_URL = "https://sheetdb.io/api/v1/5ygnspqc90f9d"
 LOCAL_FILE = "recipes.json"
 
 # -------- API KLÍČ --------
+if "show_api_input" not in st.session_state:
+    st.session_state.show_api_input = False
 if "api_key" not in st.session_state:
     st.session_state.api_key = ""
-
-if not st.session_state.api_key:
-    st.session_state.api_key = st.text_input(
-        "Vlož svůj API klíč (jednou na spuštění)", type="password"
-    )
 
 # -------- AI --------
 def analyze(content):
@@ -145,8 +142,8 @@ label, .stTextInput label, .stNumberInput label {color:#ffffff !important; font-
 </style>
 """, unsafe_allow_html=True)
 
-# -------- HORNÍ PANEL --------
-cols = st.columns([4,0.5,0.5,0.5])
+# -------- HORNÍ PANEL S 4 IKONKAMI --------
+cols = st.columns([3,0.5,0.5,0.5])
 with cols[0]:
     st.markdown("<h1>Márova kuchařka</h1>", unsafe_allow_html=True)
 with cols[1]:
@@ -159,6 +156,17 @@ with cols[2]:
 with cols[3]:
     if st.button("🔍"):
         st.session_state.show_search = not st.session_state.get("show_search", False)
+
+# -------- SCHOVANÝ API KLÍČ --------
+cols_api = st.columns([0.5])
+with cols_api[0]:
+    if st.button("🔑"):
+        st.session_state.show_api_input = not st.session_state.show_api_input
+
+if st.session_state.show_api_input:
+    st.session_state.api_key = st.text_input(
+        "Vlož svůj API klíč (jednou na spuštění)", type="password"
+    )
 
 if "show_search" not in st.session_state:
     st.session_state.show_search = False
