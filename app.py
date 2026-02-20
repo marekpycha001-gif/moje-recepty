@@ -2,112 +2,164 @@ import streamlit as st
 import google.generativeai as genai
 from PIL import Image
 import requests
+import json
+import os
+from io import BytesIO
+import re
 
-st.set_page_config(page_title="Moje Recepty", page_icon="🍳")
+st.set_page_config(page_title="Moje Recepty", page_icon="🍳", layout="centered")
 
-# TVOJE SHEETDB API URL
 SDB_URL = "https://sheetdb.io/api/v1/5ygnspqc90f9d"
+LOCAL_FILE = "recipes.json"
 
 
+# ---------- AI ----------
 def analyze(content, api_key):
-    try:
-        genai.configure(api_key=api_key)
-        models = [m.name for m in genai.list_models() if "generateContent" in m.supported_generation_methods]
-        m_name = next((m for m in models if "flash" in m), models[0])
-        model = genai.GenerativeModel(m_name)
-
-        prompt = "Jsi expert na vareni. Format: NAZEV: [Nazev], INGREDIENCE: - [surovina], POSTUP: 1. [Krok]"
-        res = model.generate_content([prompt, content])
-        return res.text
-
-    except Exception as e:
-        return str(e)
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel("gemini-1.5-flash")
+    prompt = "Jsi expert na vareni. Format: NAZEV: [Nazev], PORCE: [pocet], INGREDIENCE: - 100 g cukr, POSTUP: 1. [Krok]"
+    res = model.generate_content([prompt, content])
+    return res.text
 
 
-# Načtení receptů z databáze při startu
+# ---------- LOCAL ----------
+def save_local(data):
+    with open(LOCAL_FILE, "w", encoding="utf8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def load_local():
+    if os.path.exists(LOCAL_FILE):
+        with open(LOCAL_FILE, "r", encoding="utf8") as f:
+            return json.load(f)
+    return []
+
+
+# ---------- LOAD ----------
 if "recipes" not in st.session_state:
     try:
-        r = requests.get(SDB_URL, timeout=5)
+        r = requests.get(SDB_URL, timeout=3)
         if r.status_code == 200:
             st.session_state.recipes = [
-                {
-                    "text": x.get("text", ""),
-                    "fav": str(x.get("fav", "")).lower() == "true"
-                }
+                {"text": x.get("text", ""), "fav": str(x.get("fav", "")).lower() == "true"}
                 for x in r.json()
             ]
         else:
-            st.session_state.recipes = []
+            st.session_state.recipes = load_local()
     except:
-        st.session_state.recipes = []
+        st.session_state.recipes = load_local()
 
 
-# Uložení do databáze
+# ---------- SAVE ----------
 def db_save():
+    data = [{"text": r["text"], "fav": r["fav"]} for r in st.session_state.recipes]
     try:
-        st.toast("Ukládám...")
-        if st.session_state.recipes:
-            data = [
-                {"text": r["text"], "fav": "true" if r["fav"] else "false"}
-                for r in st.session_state.recipes
-            ]
-
-            res = requests.post(SDB_URL, json=data)
-
-            if res.status_code in (200, 201):
-                st.toast("Uloženo ✅")
-            else:
-                st.error(res.text)
-
-    except Exception as e:
-        st.error(f"Chyba spojení: {e}")
+        requests.post(SDB_URL, json=[
+            {"text": r["text"], "fav": "true" if r["fav"] else "false"}
+            for r in st.session_state.recipes
+        ], timeout=3)
+        save_local(data)
+    except:
+        save_local(data)
 
 
+# ---------- PORCE ----------
+def scale_recipe(text, factor):
+    def repl(match):
+        num = float(match.group())
+        return str(round(num * factor, 2))
+    return re.sub(r"\d+(\.\d+)?", repl, text)
+
+
+# ---------- PDF ----------
+def export_pdf():
+    try:
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Preformatted
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.styles import getSampleStyleSheet
+
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter)
+        styles = getSampleStyleSheet()
+        elements = [Paragraph("Moje kuchařka", styles["Title"]), Spacer(1, 20)]
+
+        for r in st.session_state.recipes:
+            elements.append(Preformatted(r["text"], styles["Code"]))
+            elements.append(Spacer(1, 15))
+
+        doc.build(elements)
+        buffer.seek(0)
+        return buffer
+    except:
+        return None
+
+
+# ---------- UI ----------
 st.title("🍳 Můj chytrý receptář")
 
-# TEST tlačítko
-if st.sidebar.button("🚨 NATVRDO ULOŽIT TEST"):
-    st.session_state.recipes.insert(0, {"text": "NAZEV: Test", "fav": True})
+search = st.text_input("🔎 Hledat recept")
+
+if st.button("🔄 Synchronizovat"):
     db_save()
-    st.rerun()
+    st.success("Synchronizováno")
 
 
-# API klíč
 api = st.sidebar.text_input("API klíč", type="password")
 
 if api:
-
     tab1, tab2 = st.tabs(["Text", "Foto"])
 
-    # TEXT INPUT
     with tab1:
         with st.form("t_form", clear_on_submit=True):
-            u = st.text_area("Vložit text:")
-
-            if st.form_submit_button("Vytvořit recept"):
+            u = st.text_area("Vložit text")
+            if st.form_submit_button("Čimilali"):
                 if u:
                     r_t = analyze(u, api)
                     st.session_state.recipes.insert(0, {"text": r_t, "fav": False})
                     db_save()
                     st.rerun()
 
-    # FOTO INPUT
     with tab2:
         f = st.file_uploader("Foto", type=["jpg", "png"])
-
-        if f and st.button("Vytvořit recept", key="c2"):
+        if f and st.button("Čimilali"):
             r_t = analyze(Image.open(f), api)
             st.session_state.recipes.insert(0, {"text": r_t, "fav": False})
             db_save()
             st.rerun()
 
 
-# Výpis receptů
+# ---------- LIST ----------
 for i, r in enumerate(st.session_state.recipes):
-    with st.expander(f"Recept {i+1}"):
-        st.write(r["text"])
 
-        if st.button("Smazat", key=f"d_{i}"):
+    if search and search.lower() not in r["text"].lower():
+        continue
+
+    with st.expander(f"{'⭐ ' if r['fav'] else ''} Recept {i+1}"):
+
+        factor = st.number_input("Porce násobek", 0.1, 10.0, 1.0, 0.1, key=f"scale{i}")
+        scaled = scale_recipe(r["text"], factor)
+
+        edited = st.text_area("Text", scaled, key=f"edit{i}", height=200)
+
+        if st.button("💾 Uložit změny", key=f"s{i}"):
+            st.session_state.recipes[i]["text"] = edited
+            db_save()
+            st.rerun()
+
+        if st.button("⭐ Oblíbený", key=f"f{i}"):
+            st.session_state.recipes[i]["fav"] = not st.session_state.recipes[i]["fav"]
+            db_save()
+            st.rerun()
+
+        if st.button("🗑 Smazat", key=f"d{i}"):
             st.session_state.recipes.pop(i)
             db_save()
             st.rerun()
+
+
+# ---------- EXPORT ----------
+st.divider()
+if st.button("📄 Export PDF"):
+    pdf = export_pdf()
+    if pdf:
+        st.download_button("Stáhnout", pdf, "kucharka.pdf")
