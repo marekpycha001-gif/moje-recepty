@@ -16,18 +16,12 @@ LOCAL_FILE = "recipes.json"
 def analyze(content, api_key):
     try:
         genai.configure(api_key=api_key)
-
-        models = [
-            m.name for m in genai.list_models()
-            if "generateContent" in m.supported_generation_methods
-        ]
+        models = [m.name for m in genai.list_models() if "generateContent" in m.supported_generation_methods]
         model_name = next((m for m in models if "flash" in m.lower()), models[0])
         model = genai.GenerativeModel(model_name)
-
         prompt = "Jsi expert na vareni. Format: NAZEV: [Nazev], PORCE: [pocet], INGREDIENCE: - 100 g cukr, POSTUP: 1. [Krok]"
         res = model.generate_content([prompt, content])
         return res.text
-
     except Exception as e:
         return f"CHYBA AI: {e}"
 
@@ -65,10 +59,7 @@ def db_save():
         # nahraje aktuální data
         requests.post(
             SDB_URL,
-            json=[
-                {"title": r["title"], "text": r["text"], "fav": "true" if r["fav"] else "false"}
-                for r in st.session_state.recipes
-            ],
+            json=[{"title": r["title"], "text": r["text"], "fav": "true" if r["fav"] else "false"} for r in st.session_state.recipes],
             timeout=3,
         )
         save_local(data)
@@ -83,10 +74,7 @@ def sync_online():
         requests.delete(SDB_URL + "/all", timeout=3)
         requests.post(
             SDB_URL,
-            json=[
-                {"title": r["title"], "text": r["text"], "fav": "true" if r["fav"] else "false"}
-                for r in st.session_state.recipes
-            ],
+            json=[{"title": r["title"], "text": r["text"], "fav": "true" if r["fav"] else "false"} for r in st.session_state.recipes],
             timeout=3,
         )
         st.success("Synchronizováno s cloudem ✅")
@@ -106,17 +94,14 @@ def export_pdf():
         from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Preformatted
         from reportlab.lib.pagesizes import letter
         from reportlab.lib.styles import getSampleStyleSheet
-
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=letter)
         styles = getSampleStyleSheet()
         elements = [Paragraph("Moje kuchařka", styles["Title"]), Spacer(1, 20)]
-
         for r in st.session_state.recipes:
             elements.append(Paragraph(r["title"], styles["Heading2"]))
             elements.append(Preformatted(r["text"], styles["Code"]))
             elements.append(Spacer(1, 15))
-
         doc.build(elements)
         buffer.seek(0)
         return buffer
@@ -141,12 +126,13 @@ if api:
         with st.form("t_form", clear_on_submit=True):
             title_input = st.text_input("Název receptu")
             text_input = st.text_area("Vložit text")
-            if st.form_submit_button("Čimilali"):
-                if text_input:
-                    r_t = analyze(text_input, api)
-                    st.session_state.recipes.insert(0, {"title": title_input, "text": r_t, "fav": False})
-                    db_save()
-                    st.rerun()
+            submit_btn = st.form_submit_button("Čimilali")
+            if submit_btn and text_input:
+                # správné volání AI a uložení výsledku
+                r_t = analyze(text_input, api)
+                st.session_state.recipes.insert(0, {"title": title_input, "text": r_t, "fav": False})
+                db_save()
+                st.experimental_rerun()
 
     with tab2:
         f = st.file_uploader("Foto", type=["jpg", "png"])
@@ -154,7 +140,7 @@ if api:
             r_t = analyze(Image.open(f), api)
             st.session_state.recipes.insert(0, {"title": "", "text": r_t, "fav": False})
             db_save()
-            st.rerun()
+            st.experimental_rerun()
 
 # ---------- LIST ----------
 for i, r in enumerate(st.session_state.recipes):
@@ -174,17 +160,17 @@ for i, r in enumerate(st.session_state.recipes):
             st.session_state.recipes[i]["title"] = title_edit
             st.session_state.recipes[i]["text"] = edited
             db_save()
-            st.rerun()
+            st.experimental_rerun()
 
         if c2.button("⭐ Oblíbený", key=f"f{i}"):
             st.session_state.recipes[i]["fav"] = not st.session_state.recipes[i]["fav"]
             db_save()
-            st.rerun()
+            st.experimental_rerun()
 
         if c3.button("🗑 Smazat", key=f"d{i}"):
             st.session_state.recipes.pop(i)
             db_save()
-            st.rerun()
+            st.experimental_rerun()
 
 # ---------- EXPORT ----------
 st.divider()
