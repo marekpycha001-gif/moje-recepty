@@ -138,8 +138,7 @@ if api:
                     "fav": False
                 })
                 db_save()
-                st.session_state.new_title_text = ""  # vyčistit po uložení
-                st.experimental_rerun()
+                st.session_state.new_title_text = ""
 
     # Foto
     with tab2:
@@ -157,7 +156,6 @@ if api:
             })
             db_save()
             st.session_state.new_title_photo = ""
-            st.experimental_rerun()
 
 # ---------- LIST ----------
 for i, r in enumerate(list(st.session_state.recipes)):
@@ -176,7 +174,6 @@ for i, r in enumerate(list(st.session_state.recipes)):
             st.session_state.recipes[i]["title"] = title_edit.strip() or "Bez názvu"
             st.session_state.recipes[i]["text"] = edited
             db_save()
-            st.experimental_rerun()
 
         if c2.button("⭐ Oblíbený", key=f"f{i}"):
             st.session_state.recipes[i]["fav"] = not st.session_state.recipes[i]["fav"]
@@ -185,7 +182,6 @@ for i, r in enumerate(list(st.session_state.recipes)):
         if c3.button("🗑 Smazat", key=f"d{i}"):
             st.session_state.recipes.pop(i)
             db_save()
-            st.experimental_rerun()
 
 # ---------- EXPORT ----------
 st.divider()
