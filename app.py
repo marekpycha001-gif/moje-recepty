@@ -62,11 +62,15 @@ if "recipes" not in st.session_state:
         st.session_state.recipes = load_local()
 
 
-# ---------- SAVE ----------
+# ---------- SAVE (vymaz a nahrad) ----------
 def db_save():
     data = [{"text": r["text"], "fav": r["fav"]} for r in st.session_state.recipes]
 
     try:
+        # smaže tabulku na cloud
+        requests.delete(SDB_URL + "/all", timeout=3)
+
+        # nahraje aktuální data
         requests.post(
             SDB_URL,
             json=[
@@ -75,6 +79,8 @@ def db_save():
             ],
             timeout=3,
         )
+
+        # uloží i lokálně
         save_local(data)
         st.toast("☁️ Uloženo online")
 
@@ -83,12 +89,28 @@ def db_save():
         st.toast("💾 Uloženo offline")
 
 
+# ---------- SYNC ----------
+def sync_online():
+    try:
+        requests.delete(SDB_URL + "/all", timeout=3)
+        requests.post(
+            SDB_URL,
+            json=[
+                {"text": r["text"], "fav": "true" if r["fav"] else "false"}
+                for r in st.session_state.recipes
+            ],
+            timeout=3,
+        )
+        st.success("Synchronizováno s cloudem ✅")
+    except:
+        st.error("Nelze se připojit k internetu")
+
+
 # ---------- SCALE ----------
 def scale_recipe(text, factor):
     def repl(match):
         num = float(match.group())
         return str(round(num * factor, 2))
-
     return re.sub(r"\d+(\.\d+)?", repl, text)
 
 
@@ -113,22 +135,6 @@ def export_pdf():
         return buffer
     except:
         return None
-
-
-# ---------- SYNC ----------
-def sync_online():
-    try:
-        requests.post(
-            SDB_URL,
-            json=[
-                {"text": r["text"], "fav": "true" if r["fav"] else "false"}
-                for r in st.session_state.recipes
-            ],
-            timeout=3,
-        )
-        st.success("Synchronizováno s cloudem ✅")
-    except:
-        st.error("Nelze se připojit")
 
 
 # ---------- UI ----------
