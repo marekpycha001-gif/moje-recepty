@@ -127,12 +127,12 @@ def export_pdf():
 # -------- CSS PRO STYL --------
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400;700&display=swap');
 body, [data-testid="stAppViewContainer"] {
     background: radial-gradient(ellipse at bottom, #000428 0%, #004e92 100%);
     color: #ffffff;
 }
-h1 {font-family: 'Roboto', sans-serif; font-size:18px; color:#00ccff; font-weight:700; margin:0px; display:inline;}
+h1 {font-family: 'Dancing Script', cursive; font-size:14px; color:#00ccff; font-weight:700; margin:0px; display:inline;}
 div.stButton > button {height:35px; font-size:16px; background:#0099ff; color:white; border-radius:8px; margin:1px;}
 textarea, input[type=text], input[type=number] {font-size:16px; padding:5px; color:#000;}
 .stExpanderHeader {background:#1E3A8A !important; border-radius:8px; padding:5px; color:#ffffff !important;}
@@ -142,31 +142,27 @@ label, .stTextInput label, .stNumberInput label {color:#ffffff !important; font-
 </style>
 """, unsafe_allow_html=True)
 
-# -------- HORNÍ PANEL S 4 IKONKAMI --------
-cols = st.columns([3,0.5,0.5,0.5])
+# -------- HORNÍ IKONKY UPLNĚ NAHORU --------
+cols = st.columns([0.5,0.5,0.5,0.5])
 with cols[0]:
-    st.markdown("<h1>Márova kuchařka</h1>", unsafe_allow_html=True)
-with cols[1]:
     if st.button("➕"):
         st.session_state.show_new_recipe = not st.session_state.get("show_new_recipe", False)
-with cols[2]:
+with cols[1]:
     if st.button("🔄"):
         db_save()
         st.success("Synchronizováno ✅")
-with cols[3]:
+with cols[2]:
     if st.button("🔍"):
         st.session_state.show_search = not st.session_state.get("show_search", False)
-
-# -------- SCHOVANÝ API KLÍČ --------
-cols_api = st.columns([0.5])
-with cols_api[0]:
+with cols[3]:
     if st.button("🔑"):
         st.session_state.show_api_input = not st.session_state.show_api_input
 
 if st.session_state.show_api_input:
-    st.session_state.api_key = st.text_input(
-        "Vlož svůj API klíč (jednou na spuštění)", type="password"
-    )
+    st.session_state.api_key = st.text_input("API klíč (jednou na spuštění)", type="password")
+
+# -------- NADPIS A PODPŮRNÉ ELEMENTY --------
+st.markdown("<h1 style='margin-top:5px;'>Márova kuchařka</h1>", unsafe_allow_html=True)
 
 if "show_search" not in st.session_state:
     st.session_state.show_search = False
@@ -211,7 +207,7 @@ for i, r in enumerate(list(st.session_state.recipes)):
     header = f"{'⭐ ' if r['fav'] else ''}{r['title']}"
     with st.expander(header):
         factor = st.number_input("Násobek porcí", 0.1, 10.0, 1.0, 0.1, key=f"scale{i}")
-        scaled = scale_recipe(r["text"], factor)
+        scaled = re.sub(r"\d+(\.\d+)?", lambda m: str(round(float(m.group()))), r["text"])
 
         title_edit = st.text_input("Název", r["title"], key=f"title{i}")
         edited = st.text_area("Text", scaled, key=f"edit{i}", height=200)
