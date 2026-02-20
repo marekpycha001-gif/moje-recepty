@@ -25,11 +25,19 @@ XXXst.session_state.editing_index = None
 
 def db_save():
 XXXtry:
-XXXXXXrequests.delete(SDB_URL + "/all")
+XXXXXX# Diagnostika: Zkusime smazat a zapsat
+XXXXXXdel_res = requests.delete(SDB_URL + "/all")
 XXXXXXif st.session_state.recipes:
 XXXXXXXXXdata = [{"text": r["text"], "fav": str(r["fav"]).lower()} for r in st.session_state.recipes]
-XXXXXXXXXrequests.post(SDB_URL, json={"data": data})
-XXXexcept: pass
+XXXXXXXXXpost_res = requests.post(SDB_URL, json={"data": data})
+XXXXXXXXXif post_res.status_code == 201:
+XXXXXXXXXXXXst.toast("Ulozeno do tabulky! ✅")
+XXXXXXXXXelse:
+XXXXXXXXXXXXst.error(f"Chyba SheetDB ({post_res.status_code}): {post_res.text}")
+XXXXXXelse:
+XXXXXXXXXst.toast("Tabulka promazana (seznam je prazdny).")
+XXXexcept Exception as e:
+XXXXXXst.error(f"Chyba spojeni: {e}")
 
 def analyze(content, api_key):
 XXXtry:
@@ -58,7 +66,7 @@ XXXXXXXXXXXXXXXif "quota" not in str(r_t).lower() and "429" not in str(r_t):
 XXXXXXXXXXXXXXXXXXst.session_state.recipes.insert(0, {"text": r_t, "fav": False})
 XXXXXXXXXXXXXXXXXXdb_save()
 XXXXXXXXXXXXXXXXXXst.rerun()
-XXXXXXXXXXXXXXXelse: st.error("Dosel denni limit nebo prilis mnoho dotazu.")
+XXXXXXXXXXXXXXXelse: st.error("Limit Gemini vycerpan.")
 XXXwith t2:
 XXXXXXf = st.file_uploader("Foto", type=["jpg", "png"])
 XXXXXXif f and st.button("Cimilali", key="c2"):
@@ -67,7 +75,7 @@ XXXXXXXXXif "quota" not in str(r_t).lower() and "429" not in str(r_t):
 XXXXXXXXXXXXst.session_state.recipes.insert(0, {"text": r_t, "fav": False})
 XXXXXXXXXXXXdb_save()
 XXXXXXXXXXXXst.rerun()
-XXXXXXXXXelse: st.error("Dosel denni limit nebo prilis mnoho dotazu.")
+XXXXXXXXXelse: st.error("Limit Gemini vycerpan.")
 else:
 XXXst.info("Vlozit klic vlevo.")
 
