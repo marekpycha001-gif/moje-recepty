@@ -6,9 +6,10 @@ import json
 import os
 from io import BytesIO
 import re
+import base64
 
 # -------- CONFIG --------
-st.set_page_config(page_title="Moje Recepty", page_icon="🍳", layout="wide")
+st.set_page_config(page_title="Márova kuchařka", page_icon="🍳", layout="wide")
 
 SDB_URL = "https://sheetdb.io/api/v1/5ygnspqc90f9d"
 LOCAL_FILE = "recipes.json"
@@ -56,7 +57,8 @@ def load_recipes():
                 {
                     "title": x.get("nazev", "").strip() or "Bez názvu",
                     "text": x.get("text", "").strip(),
-                    "fav": str(x.get("fav", "")).lower() == "true"
+                    "fav": str(x.get("fav", "")).lower() == "true",
+                    "img": x.get("img", "")
                 }
                 for x in r.json()
             ]
@@ -67,6 +69,8 @@ def load_recipes():
         for r in recipes:
             if not r.get("title") or r["title"].strip() == "":
                 r["title"] = "Bez názvu"
+            if "img" not in r:
+                r["img"] = ""
     return recipes
 
 if "recipes" not in st.session_state:
@@ -81,7 +85,15 @@ def db_save():
         requests.delete(SDB_URL + "/all", timeout=3)
         requests.post(
             SDB_URL,
-            json=[{"text": r["text"], "fav": "true" if r["fav"] else "false", "nazev": r["title"]} for r in st.session_state.recipes],
+            json=[
+                {
+                    "text": r["text"],
+                    "fav": "true" if r["fav"] else "false",
+                    "nazev": r["title"],
+                    "img": r.get("img", "")
+                }
+                for r in st.session_state.recipes
+            ],
             timeout=3,
         )
     except:
@@ -98,15 +110,25 @@ def scale_recipe(text, factor):
 # -------- PDF EXPORT --------
 def export_pdf():
     try:
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Preformatted
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Preformatted, Image as RLImage
         from reportlab.lib.pagesizes import letter
         from reportlab.lib.styles import getSampleStyleSheet
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=letter)
         styles = getSampleStyleSheet()
-        elements = [Paragraph("Moje kuchařka", styles["Title"]), Spacer(1, 20)]
+        elements = [Paragraph("Márova kuchařka", styles["Title"]), Spacer(1, 20)]
         for r in st.session_state.recipes:
             elements.append(Paragraph(r["title"], styles["Heading2"]))
+            if r.get("img"):
+                try:
+                    if r["img"].startswith("http"):
+                        img_data = BytesIO(requests.get(r["img"]).content)
+                    else:
+                        img_data = BytesIO(base64.b64decode(r["img"]))
+                    elements.append(RLImage(img_data, width=200, height=150))
+                    elements.append(Spacer(1, 10))
+                except:
+                    pass
             elements.append(Preformatted(r["text"], styles["Code"]))
             elements.append(Spacer(1, 15))
         doc.build(elements)
@@ -116,7 +138,22 @@ def export_pdf():
         return None
 
 # -------- UI --------
-st.title("🍳 Můj chytrý receptář (mobilní verze)")
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: 'Roboto', sans-serif;
+}
+
+div.stButton > button {height: 50px; width: 100%; font-size: 18px; margin: 5px 0;}
+textarea {font-size: 16px;}
+input[type=text], input[type=password], input[type=number] {font-size: 16px;}
+h1 {font-size: 28px; font-weight: 700; color: #ff6600; margin-bottom: 15px;}
+</style>
+""", unsafe_allow_html=True)
+
+st.title("Márova kuchařka")  # nový stylový název
 
 search = st.text_input("🔎 Hledat recept")
 
@@ -138,7 +175,7 @@ if st.session_state.api_key:
             if new_text.strip():
                 generated = analyze(new_text.strip())
                 title_final = st.session_state.new_title_text.strip() or "Bez názvu"
-                st.session_state.recipes.insert(0, {"title": title_final, "text": generated, "fav": False})
+                st.session_state.recipes.insert(0, {"title": title_final, "text": generated, "fav": False, "img": ""})
                 db_save()
                 st.session_state.new_title_text = ""
 
@@ -150,8 +187,11 @@ if st.session_state.api_key:
         f = st.file_uploader("Foto", type=["jpg", "png"])
         if f and st.button("Čimilali foto"):
             generated = analyze(Image.open(f))
+            buffered = BytesIO()
+            Image.open(f).save(buffered, format="PNG")
+            img_base64 = base64.b64encode(buffered.getvalue()).decode()
             title_final = st.session_state.new_title_photo.strip() or "Bez názvu"
-            st.session_state.recipes.insert(0, {"title": title_final, "text": generated, "fav": False})
+            st.session_state.recipes.insert(0, {"title": title_final, "text": generated, "fav": False, "img": img_base64})
             db_save()
             st.session_state.new_title_photo = ""
 
@@ -160,7 +200,14 @@ for i, r in enumerate(list(st.session_state.recipes)):
     if search and search.lower() not in r["text"].lower() and search.lower() not in r["title"].lower():
         continue
 
-    with st.expander(f"{'⭐ ' if r['fav'] else ''}{r['title']}"):
+    header = f"{'⭐ ' if r['fav'] else ''}{r['title']}"
+    with st.expander(header):
+        if r.get("img"):
+            try:
+                st.image(BytesIO(base64.b64decode(r["img"])), width=200)
+            except:
+                pass
+
         factor = st.number_input("Násobek porcí", 0.1, 10.0, 1.0, 0.1, key=f"scale{i}")
         scaled = scale_recipe(r["text"], factor)
 
@@ -189,10 +236,3 @@ if st.button("📄 Export PDF"):
         st.download_button("Stáhnout PDF", pdf, "kucharka.pdf")
     else:
         st.error("Nejdřív nainstaluj knihovnu: pip install reportlab")
-
-# -------- CSS PRO MOBIL --------
-st.markdown("""
-<style>
-div.stButton > button {height: 50px; width: 100%;}
-</style>
-""", unsafe_allow_html=True)
