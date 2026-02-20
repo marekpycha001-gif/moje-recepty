@@ -121,20 +121,15 @@ body,[data-testid="stAppViewContainer"]{
 """,unsafe_allow_html=True)
 
 # ---------- TOP ICON BAR ----------
-st.markdown("""
-<div class="topbar">
-<button class="topbtn" onclick="document.querySelector('#btn_plus').click()">➕</button>
-<button class="topbtn" onclick="document.querySelector('#btn_sync').click()">🔄</button>
-<button class="topbtn" onclick="document.querySelector('#btn_search').click()">🔍</button>
-<button class="topbtn" onclick="document.querySelector('#btn_api').click()">🔑</button>
-</div>
-""",unsafe_allow_html=True)
-
-# skryté tlačítka pro Streamlit
-st.button("", key="btn_plus", on_click=lambda: st.session_state.update({"show_new": not st.session_state.show_new}))
-st.button("", key="btn_sync", on_click=lambda: save_db())
-st.button("", key="btn_search", on_click=lambda: st.session_state.update({"show_search": not st.session_state.show_search}))
-st.button("", key="btn_api", on_click=lambda: st.session_state.update({"show_api": not st.session_state.show_api}))
+c1,c2,c3,c4=st.columns([1,1,1,1])
+with c1: 
+    if st.button("➕"): st.session_state.show_new = not st.session_state.show_new
+with c2: 
+    if st.button("🔄"): save_db()
+with c3: 
+    if st.button("🔍"): st.session_state.show_search = not st.session_state.show_search
+with c4: 
+    if st.button("🔑"): st.session_state.show_api = not st.session_state.show_api
 
 # ---------- TITLE ----------
 st.markdown('<div class="title">Márova kuchařka</div>',unsafe_allow_html=True)
