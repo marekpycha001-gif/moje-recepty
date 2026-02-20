@@ -146,13 +146,12 @@ if st.session_state.show_api:
     st.session_state.api=st.text_input("API klíč",type="password")
 
 # ---------- SEARCH ----------
-search=""
+search_txt=""
 if st.session_state.show_search:
-    search=st.text_input("Hledat recept")
+    search_txt=st.text_input("Hledat recept")
 
 # ---------- NEW ----------
 if st.session_state.show_new:
-
     tab1,tab2=st.tabs(["Text","Foto"])
 
     with tab1:
@@ -184,7 +183,8 @@ if st.session_state.show_new:
 # ---------- LIST ----------
 for i,r in enumerate(st.session_state.recipes):
 
-    if search and search.lower() not in r["title"].lower():
+    # filtr podle search, ale ukazuje všechny, když search prázdný
+    if search_txt and search_txt.lower() not in (r["title"]+r["text"]).lower():
         continue
 
     with st.expander(r["title"]):
