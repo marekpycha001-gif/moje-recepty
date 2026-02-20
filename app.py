@@ -139,8 +139,9 @@ h1 {font-family: 'Roboto', sans-serif; font-size:18px; color:#00ccff; font-weigh
 div.stButton > button {height:35px; font-size:16px; background:#0099ff; color:white; border-radius:8px; margin:1px;}
 textarea, input[type=text], input[type=number] {font-size:16px; padding:5px; color:#000;}
 .stExpanderHeader {background:#1E3A8A !important; border-radius:8px; padding:5px; color:#ffffff !important;}
-.stExpanderContent {background:#cce0ff !important; border-radius:8px; padding:10px;}
-label, .stTextInput label, .stNumberInput label {color:#000 !important; font-weight:700;}
+.stExpanderContent {background:#cce0ff !important; border-radius:8px; padding:10px; color:#000000;}
+label, .stTextInput label, .stNumberInput label {color:#ffffff !important; font-weight:700;}
+.stTextInput>div>div>input, .stNumberInput>div>div>input, textarea {color:#000000;}
 </style>
 """, unsafe_allow_html=True)
 
