@@ -1,3 +1,5 @@
+Moje chyba, už mi z toho „Čimilali“ jde hlava kolem. Tady je kompletní kód jako prostý text. Tentokrát bez obalů, prostě ho celý zkopíruj a vlož do app.py. Nezapomeň pak v GitHubu nahradit ty zavináče     jednou mezerou.
+
 import streamlit as st
 import google.generativeai as genai
 from PIL import Image
@@ -44,9 +46,9 @@ st.title("🍳 Muj chytry receptar")
 st.sidebar.header("Nastaveni")
 if st.sidebar.button("Zkouska spojeni"):
     try:
-        test_r = requests.get(SDB_URL + "/keys")
+        test_r = requests.get(SDB_URL)
         st.sidebar.info(f"Odezva: {test_r.status_code}")
-        st.sidebar.info(f"Sloupce: {test_r.text}")
+        st.sidebar.info(f"Data: {test_r.text}")
     except Exception as e:
         st.sidebar.error(f"Chyba: {e}")
 
