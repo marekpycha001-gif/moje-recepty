@@ -52,7 +52,6 @@ if "recipes" not in st.session_state:
 
 # ---------- SAVE ----------
 def db_save():
-    data = [{"title": r["title"], "text": r["text"], "fav": r["fav"]} for r in st.session_state.recipes]
     try:
         requests.delete(SDB_URL + "/all", timeout=3)
         requests.post(
@@ -60,11 +59,9 @@ def db_save():
             json=[{"title": r["title"], "text": r["text"], "fav": "true" if r["fav"] else "false"} for r in st.session_state.recipes],
             timeout=3,
         )
-        save_local(data)
-        st.toast("☁️ Uloženo online")
     except:
-        save_local(data)
-        st.toast("💾 Uloženo offline")
+        pass
+    save_local(st.session_state.recipes)
 
 # ---------- SYNC ----------
 def sync_online():
@@ -122,14 +119,13 @@ if api:
 
     # ---------- TEXT ----------
     with tab1:
-        with st.form("t_form", clear_on_submit=True):
-            title_input = st.text_input("Název receptu")
-            text_input = st.text_area("Vložit text")
-            submit_btn = st.form_submit_button("Čimilali")
-            if submit_btn and text_input:
+        title_input = st.text_input("Název receptu")
+        text_input = st.text_area("Vložit text")
+        if st.button("Čimilali"):
+            if text_input.strip():
                 generated_text = analyze(text_input, api)
                 st.session_state.recipes.insert(0, {
-                    "title": title_input if title_input.strip() else "Bez názvu",
+                    "title": title_input.strip() if title_input.strip() else "Bez názvu",
                     "text": generated_text,
                     "fav": False
                 })
@@ -138,11 +134,11 @@ if api:
     # ---------- FOTO ----------
     with tab2:
         f = st.file_uploader("Foto", type=["jpg", "png"])
-        title_input = st.text_input("Název receptu (pro foto)")
+        title_input_photo = st.text_input("Název receptu (pro foto)")
         if f and st.button("Čimilali foto"):
             generated_text = analyze(Image.open(f), api)
             st.session_state.recipes.insert(0, {
-                "title": title_input if title_input.strip() else "Bez názvu",
+                "title": title_input_photo.strip() if title_input_photo.strip() else "Bez názvu",
                 "text": generated_text,
                 "fav": False
             })
