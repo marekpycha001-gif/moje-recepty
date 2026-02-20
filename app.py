@@ -120,21 +120,23 @@ api = st.sidebar.text_input("API klíč", type="password")
 if api:
     tab1, tab2 = st.tabs(["Text", "Foto"])
 
+    # ---------- TEXT ----------
     with tab1:
         with st.form("t_form", clear_on_submit=True):
             title_input = st.text_input("Název receptu")
             text_input = st.text_area("Vložit text")
             submit_btn = st.form_submit_button("Čimilali")
             if submit_btn and text_input:
-                r_t = analyze(text_input, api)
-                st.session_state.recipes.insert(0, {"title": title_input, "text": r_t, "fav": False})
+                generated_text = analyze(text_input, api)
+                st.session_state.recipes.insert(0, {"title": title_input, "text": generated_text, "fav": False})
                 db_save()
 
+    # ---------- FOTO ----------
     with tab2:
         f = st.file_uploader("Foto", type=["jpg", "png"])
         if f and st.button("Čimilali"):
-            r_t = analyze(Image.open(f), api)
-            st.session_state.recipes.insert(0, {"title": "", "text": r_t, "fav": False})
+            generated_text = analyze(Image.open(f), api)
+            st.session_state.recipes.insert(0, {"title": "", "text": generated_text, "fav": False})
             db_save()
 
 # ---------- LIST ----------
