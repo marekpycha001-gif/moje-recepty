@@ -119,16 +119,6 @@ def export_pdf():
         elements = [Paragraph("Márova kuchařka", styles["Title"]), Spacer(1, 20)]
         for r in st.session_state.recipes:
             elements.append(Paragraph(r["title"], styles["Heading2"]))
-            if r.get("img"):
-                try:
-                    if r["img"].startswith("http"):
-                        img_data = BytesIO(requests.get(r["img"]).content)
-                    else:
-                        img_data = BytesIO(base64.b64decode(r["img"]))
-                    elements.append(RLImage(img_data, width=200, height=150))
-                    elements.append(Spacer(1, 10))
-                except:
-                    pass
             elements.append(Preformatted(r["text"], styles["Code"]))
             elements.append(Spacer(1, 15))
         doc.build(elements)
@@ -153,23 +143,20 @@ textarea, input[type=text], input[type=number] {font-size:16px; padding:5px; col
 </style>
 """, unsafe_allow_html=True)
 
-# -------- HORNÍ PANEL (název + lupa + sync + nový recept jako +) --------
+# -------- HORNÍ PANEL (název + ikony vedle sebe) --------
 cols = st.columns([4,0.3,0.3,0.3])
 with cols[0]:
     st.markdown("<h1>Márova kuchařka 🌌</h1>", unsafe_allow_html=True)
 with cols[1]:
-    if st.button("🔍"):
-        st.session_state.show_search = not st.session_state.get("show_search", False)
+    if st.button("➕"):
+        st.session_state.show_new_recipe = not st.session_state.get("show_new_recipe", False)
 with cols[2]:
     if st.button("🔄"):
         db_save()
         st.success("Synchronizováno ✅")
 with cols[3]:
-    if st.button("➕"):
-        if "show_new_recipe" not in st.session_state:
-            st.session_state.show_new_recipe = True
-        else:
-            st.session_state.show_new_recipe = not st.session_state.show_new_recipe
+    if st.button("🔍"):
+        st.session_state.show_search = not st.session_state.get("show_search", False)
 
 if "show_search" not in st.session_state:
     st.session_state.show_search = False
@@ -216,12 +203,6 @@ for i, r in enumerate(list(st.session_state.recipes)):
 
     header = f"{'⭐ ' if r['fav'] else ''}{r['title']}"
     with st.expander(header):
-        if r.get("img"):
-            try:
-                st.image(BytesIO(base64.b64decode(r["img"])), width=200)
-            except:
-                pass
-
         factor = st.number_input("Násobek porcí", 0.1, 10.0, 1.0, 0.1, key=f"scale{i}")
         scaled = scale_recipe(r["text"], factor)
 
