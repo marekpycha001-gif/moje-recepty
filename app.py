@@ -14,7 +14,7 @@ st.set_page_config(page_title="Márova kuchařka", page_icon="🍳", layout="wid
 SDB_URL = "https://sheetdb.io/api/v1/5ygnspqc90f9d"
 LOCAL_FILE = "recipes.json"
 
-# -------- API KLÍČ (zadáš jen jednou) --------
+# -------- API KLÍČ --------
 if "api_key" not in st.session_state:
     st.session_state.api_key = ""
 
@@ -137,29 +137,35 @@ def export_pdf():
     except:
         return None
 
-# -------- UI --------
+# -------- CSS PRO MODERN --------
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
 
-h1, h2, h3, h4, h5, h6 {
-    font-family: 'Roboto', sans-serif;
-}
-
-div.stButton > button {height: 50px; width: 100%; font-size: 18px; margin: 5px 0;}
-textarea {font-size: 16px;}
-input[type=text], input[type=password], input[type=number] {font-size: 16px;}
-h1 {font-size: 28px; font-weight: 700; color: #ff6600; margin-bottom: 15px;}
+h1 {font-family: 'Roboto', sans-serif; font-size: 26px; color: #0077cc; font-weight: 700; margin-bottom: 10px;}
+div.stButton > button {height:50px; width:100%; font-size:16px; background: #0077cc; color:white; border-radius:8px; margin:5px 0;}
+textarea, input[type=text], input[type=number] {font-size:16px; padding:5px;}
+.stExpanderHeader {background:#e6f0ff; border-radius:8px; padding:5px;}
 </style>
 """, unsafe_allow_html=True)
 
-st.title("Márova kuchařka")  # nový stylový název
+st.title("Márova kuchařka")
 
-search = st.text_input("🔎 Hledat recept")
+# -------- MINI SEARCH --------
+if "show_search" not in st.session_state:
+    st.session_state.show_search = False
 
-if st.button("🔄 Synchronizovat"):
+search_col, sync_col = st.columns([0.15, 0.15])
+if search_col.button("🔍"):
+    st.session_state.show_search = not st.session_state.show_search
+if sync_col.button("🔄"):
     db_save()
     st.success("Synchronizováno ✅")
+
+if st.session_state.show_search:
+    search = st.text_input("Hledat recept")
+else:
+    search = ""
 
 # -------- CREATE RECIPE --------
 if st.session_state.api_key:
@@ -170,7 +176,7 @@ if st.session_state.api_key:
         if "new_title_text" not in st.session_state:
             st.session_state.new_title_text = ""
         st.session_state.new_title_text = st.text_input("Název receptu", value=st.session_state.new_title_text)
-        new_text = st.text_area("Vložit text", height=250)
+        new_text = st.text_area("Vložit text", height=200)
         if st.button("Čimilali"):
             if new_text.strip():
                 generated = analyze(new_text.strip())
@@ -212,7 +218,7 @@ for i, r in enumerate(list(st.session_state.recipes)):
         scaled = scale_recipe(r["text"], factor)
 
         title_edit = st.text_input("Název", r["title"], key=f"title{i}")
-        edited = st.text_area("Text", scaled, key=f"edit{i}", height=250)
+        edited = st.text_area("Text", scaled, key=f"edit{i}", height=200)
 
         c1, c2, c3 = st.columns([1,1,1])
         if c1.button("💾 Uložit", key=f"s{i}"):
