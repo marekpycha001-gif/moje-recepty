@@ -137,19 +137,24 @@ def export_pdf():
     except:
         return None
 
-# -------- CSS PRO MODERN --------
+# -------- CSS PRO HVĚZDNÉ POZADÍ --------
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
 
-h1 {font-family: 'Roboto', sans-serif; font-size: 26px; color: #0077cc; font-weight: 700; margin-bottom: 10px;}
-div.stButton > button {height:50px; width:100%; font-size:16px; background: #0077cc; color:white; border-radius:8px; margin:5px 0;}
-textarea, input[type=text], input[type=number] {font-size:16px; padding:5px;}
-.stExpanderHeader {background:#e6f0ff; border-radius:8px; padding:5px;}
+body, [data-testid="stAppViewContainer"] {
+    background: radial-gradient(ellipse at bottom, #000428 0%, #004e92 100%);
+    color: #ffffff;
+}
+h1 {font-family: 'Roboto', sans-serif; font-size:26px; color:#00ccff; font-weight:700; margin-bottom:10px;}
+div.stButton > button {height:50px; width:100%; font-size:16px; background:#0099ff; color:white; border-radius:8px; margin:5px 0;}
+textarea, input[type=text], input[type=number] {font-size:16px; padding:5px; color:#000;}
+.stExpanderHeader {background:#001f3f; border-radius:8px; padding:5px; color:#00ccff;}
+.stTextInput>div>div>input {background:#e6f0ff; color:#000; border-radius:5px; padding:5px;}
 </style>
 """, unsafe_allow_html=True)
 
-st.title("Márova kuchařka")
+st.title("Márova kuchařka 🌌")
 
 # -------- MINI SEARCH --------
 if "show_search" not in st.session_state:
