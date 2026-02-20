@@ -9,28 +9,19 @@ SDB_URL="https://sheetdb.io/api/v1/5ygnspqc90f9d"
 LOCAL_FILE="recipes.json"
 
 # ---------- SESSION ----------
-defaults={
-    "api":"",
-    "recipes":[],
-    "show_new":False,
-    "show_search":False,
-    "show_api":False
-}
+defaults={"recipes":[],"show_new":False,"show_search":False}
 for k,v in defaults.items():
     if k not in st.session_state:
         st.session_state[k]=v
-
 
 # ---------- DESIGN ----------
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&display=swap');
-
 body,[data-testid="stAppViewContainer"]{
  background:radial-gradient(circle at bottom,#000428,#004e92);
  color:white;
 }
-
 .topbar{
  display:flex;
  justify-content:center;
@@ -38,17 +29,6 @@ body,[data-testid="stAppViewContainer"]{
  margin-top:-10px;
  margin-bottom:5px;
 }
-
-.topbtn{
- background:#0099ff;
- color:white;
- border:none;
- padding:6px 10px;
- border-radius:8px;
- font-size:18px;
- cursor:pointer;
-}
-
 .title{
  font-family:'Dancing Script',cursive;
  font-size:20px;
@@ -56,13 +36,18 @@ body,[data-testid="stAppViewContainer"]{
  color:#00ccff;
  margin-bottom:10px;
 }
-
+.stButton>button{
+ background:#0099ff;
+ color:white;
+ border-radius:8px;
+ font-size:18px;
+ padding:6px 10px;
+}
 .stExpanderHeader{
  background:#1E3A8A !important;
  color:white !important;
  border-radius:10px;
 }
-
 .stExpanderContent{
  background:#cce0ff !important;
  color:black;
@@ -71,32 +56,27 @@ body,[data-testid="stAppViewContainer"]{
 </style>
 """,unsafe_allow_html=True)
 
-
 # ---------- AI ----------
 def ai(txt):
     try:
-        genai.configure(api_key=st.session_state.api)
+        genai.configure(api_key=st.secrets["GEMINI_KEY"])
         model=genai.GenerativeModel("gemini-1.5-flash")
 
         prompt=f"""
-Zpracuj recept a vrať výstup přesně v tomto formátu:
+Zpracuj recept a vrať:
 
-NÁZEV: ...
-ČAS: ... minut
-KALORIE: ... kcal
+NÁZEV:
+ČAS:
+KALORIE:
 INGREDIENCE:
-- ...
 POSTUP:
-1. ...
 
 TEXT:
 {txt}
 """
         return model.generate_content(prompt).text
-
     except Exception as e:
         return f"AI chyba: {e}"
-
 
 # ---------- STORAGE ----------
 def load_local():
@@ -112,11 +92,9 @@ def load_db():
     try:
         r=requests.get(SDB_URL,timeout=5)
         if r.status_code==200 and r.text.strip():
-            return [{
-                "title":x.get("nazev","Bez názvu"),
-                "text":x.get("text",""),
-                "fav":False
-            } for x in r.json()]
+            return [{"title":x.get("nazev","Bez názvu"),
+                     "text":x.get("text",""),
+                     "fav":False} for x in r.json()]
     except:
         pass
     return load_local()
@@ -132,48 +110,34 @@ def save_db():
         pass
     save_local(st.session_state.recipes)
 
-
 if not st.session_state.recipes:
     st.session_state.recipes=load_db()
 
+# ---------- TOP BUTTON BAR ----------
+c1,c2,c3,c4=st.columns(4)
 
-# ---------- TOP BAR ----------
-clicked=st.query_params.get("btn","")
+with c1:
+    if st.button("➕"):
+        st.session_state.show_new=not st.session_state.show_new
 
-st.markdown(f"""
-<div class="topbar">
-<a href="?btn=new"><button class="topbtn">➕</button></a>
-<a href="?btn=sync"><button class="topbtn">🔄</button></a>
-<a href="?btn=search"><button class="topbtn">🔍</button></a>
-<a href="?btn=api"><button class="topbtn">🔑</button></a>
-</div>
-""",unsafe_allow_html=True)
+with c2:
+    if st.button("🔄"):
+        save_db()
 
-# ---------- ACTIONS ----------
-if clicked=="new":
-    st.session_state.show_new=not st.session_state.show_new
-if clicked=="search":
-    st.session_state.show_search=not st.session_state.show_search
-if clicked=="api":
-    st.session_state.show_api=not st.session_state.show_api
-if clicked=="sync":
-    save_db()
+with c3:
+    if st.button("🔍"):
+        st.session_state.show_search=not st.session_state.show_search
 
+with c4:
+    st.write("")
 
 # ---------- TITLE ----------
 st.markdown('<div class="title">Márova kuchařka</div>',unsafe_allow_html=True)
 
-
-# ---------- API ----------
-if st.session_state.show_api:
-    st.session_state.api=st.text_input("API klíč",type="password")
-
-
 # ---------- SEARCH ----------
 search=""
 if st.session_state.show_search:
-    search=st.text_input("Hledat recept")
-
+    search=st.text_input("Hledat")
 
 # ---------- NEW ----------
 if st.session_state.show_new:
@@ -206,7 +170,6 @@ if st.session_state.show_new:
             save_db()
             st.rerun()
 
-
 # ---------- LIST ----------
 for i,r in enumerate(st.session_state.recipes):
 
@@ -221,14 +184,14 @@ for i,r in enumerate(st.session_state.recipes):
         c1,c2=st.columns(2)
 
         with c1:
-            if st.button("💾 Uložit",key=f"s{i}"):
+            if st.button("💾",key=f"s{i}"):
                 st.session_state.recipes[i]["title"]=nt
                 st.session_state.recipes[i]["text"]=tx
                 save_db()
                 st.rerun()
 
         with c2:
-            if st.button("🗑 Smazat",key=f"d{i}"):
+            if st.button("🗑",key=f"d{i}"):
                 st.session_state.recipes.pop(i)
                 save_db()
                 st.rerun()
