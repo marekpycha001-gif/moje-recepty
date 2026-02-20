@@ -1,3 +1,12 @@
+Tady je kompletní opravený kód, který si sám najde funkční model a vyhne se té chybě 404. Obsahuje tvou adresu pro SheetDB a osvědčenou metodu s XXX.
+
+Zkopíruj vše od prvního řádku až po poslední:
+
+import streamlit as st
+import google.generativeai as genai
+from PIL import Image
+import requests
+
 CODE = """
 import streamlit as st
 import google.generativeai as genai
@@ -29,7 +38,9 @@ XXXexcept: pass
 def analyze(content, api_key):
 XXXtry:
 XXXXXXgenai.configure(api_key=api_key)
-XXXXXXmodel = genai.GenerativeModel("gemini-1.5-flash")
+XXXXXXmodels = [m.name for m in genai.list_models() if "generateContent" in m.supported_generation_methods]
+XXXXXXm_name = next((m for m in models if "flash" in m), models[0])
+XXXXXXmodel = genai.GenerativeModel(m_name)
 XXXXXXp = "Jsi expert na vareni. Vsechny miry dej na gramy (g). Format: NAZEV: [Nazev], INGREDIENCE: - [cislo] [jednotka] [surovina], POSTUP: 1. [Krok]"
 XXXXXXwith st.spinner("Cimilali maka..."):
 XXXXXXXXXres = model.generate_content([p, content])
@@ -47,20 +58,20 @@ XXXXXXXXXu = st.text_area("Vlozit text:")
 XXXXXXXXXif st.form_submit_button("Cimilali"):
 XXXXXXXXXXXXif u:
 XXXXXXXXXXXXXXXr_t = analyze(u, api)
-XXXXXXXXXXXXXXXif "quota" not in r_t.lower():
+XXXXXXXXXXXXXXXif "quota" not in str(r_t).lower() and "429" not in str(r_t):
 XXXXXXXXXXXXXXXXXXst.session_state.recipes.insert(0, {"text": r_t, "fav": False})
 XXXXXXXXXXXXXXXXXXdb_save()
 XXXXXXXXXXXXXXXXXXst.rerun()
-XXXXXXXXXXXXXXXelse: st.error("Dosel denni limit receptu.")
+XXXXXXXXXXXXXXXelse: st.error("Dosel denni limit nebo prilis mnoho dotazu.")
 XXXwith t2:
 XXXXXXf = st.file_uploader("Foto", type=["jpg", "png"])
 XXXXXXif f and st.button("Cimilali", key="c2"):
 XXXXXXXXXr_t = analyze(Image.open(f), api)
-XXXXXXXXXif "quota" not in r_t.lower():
+XXXXXXXXXif "quota" not in str(r_t).lower() and "429" not in str(r_t):
 XXXXXXXXXXXXst.session_state.recipes.insert(0, {"text": r_t, "fav": False})
 XXXXXXXXXXXXdb_save()
 XXXXXXXXXXXXst.rerun()
-XXXXXXXXXelse: st.error("Dosel denni limit receptu.")
+XXXXXXXXXelse: st.error("Dosel denni limit nebo prilis mnoho dotazu.")
 else:
 XXXst.info("Vlozit klic vlevo.")
 
