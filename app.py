@@ -1,253 +1,234 @@
-import { useState } from "react";
+import streamlit as st
+import google.generativeai as genai
+from PIL import Image
+import requests, json, os
 
-export default function App() {
-  const [recipes, setRecipes] = useState([
-    {
-      id: 1,
-      name: "Palačinky",
-      ingredients: ["mléko", "mouka", "vejce"],
-      text: "Smíchat a usmažit",
-      fav: false
-    }
-  ]);
+st.set_page_config(page_title="Márova kuchařka", page_icon="🍳", layout="centered")
 
-  const [query, setQuery] = useState("");
-  const [openId, setOpenId] = useState(null);
+SDB_URL="https://sheetdb.io/api/v1/5ygnspqc90f9d"
+LOCAL_FILE="recipes.json"
 
-  // SEARCH
-  const filtered = recipes.filter(r => {
-    if (!query.trim()) return true;
-    const q = query.toLowerCase();
+# ---------- SESSION ----------
+defaults={
+    "api":"",
+    "recipes":[],
+    "show_new":False,
+    "show_search":False,
+    "show_api":False,
+    "fav_only":False
+}
+for k,v in defaults.items():
+    if k not in st.session_state:
+        st.session_state[k]=v
 
-    return (
-      r.name.toLowerCase().includes(q) ||
-      r.text.toLowerCase().includes(q) ||
-      r.ingredients.some(i => i.toLowerCase().includes(q))
-    );
-  });
+# ---------- AI ----------
+def ai(txt):
+    try:
+        genai.configure(api_key=st.session_state.api)
+        model=genai.GenerativeModel("gemini-1.5-flash")
+        return model.generate_content(txt).text
+    except Exception as e:
+        return f"AI chyba: {e}"
 
-  // ADD
-  function addRecipe() {
-    const id = Date.now();
-    setRecipes([
-      ...recipes,
-      { id, name: "Nový recept", ingredients: [], text: "", fav: false }
-    ]);
-    setOpenId(id);
-  }
+# ---------- STORAGE ----------
+def load_local():
+    if os.path.exists(LOCAL_FILE):
+        return json.load(open(LOCAL_FILE,encoding="utf8"))
+    return []
 
-  // DELETE
-  function del(id) {
-    setRecipes(recipes.filter(r => r.id !== id));
-  }
+def save_local(d):
+    with open(LOCAL_FILE,"w",encoding="utf8") as f:
+        json.dump(d,f,ensure_ascii=False,indent=2)
 
-  // UPDATE
-  function update(id, field, value) {
-    setRecipes(recipes.map(r => (r.id === id ? { ...r, [field]: value } : r)));
-  }
+def load_db():
+    try:
+        r=requests.get(SDB_URL,timeout=3)
+        if r.status_code==200:
+            return [{
+                "title":x.get("nazev","Bez názvu"),
+                "text":x.get("text",""),
+                "fav":str(x.get("fav","")).lower()=="true"
+            } for x in r.json()]
+    except: pass
+    return load_local()
 
-  // INGREDIENT UPDATE
-  function updateIng(id, index, value) {
-    setRecipes(
-      recipes.map(r => {
-        if (r.id !== id) return r;
-        const arr = [...r.ingredients];
-        arr[index] = value;
-        return { ...r, ingredients: arr };
-      })
-    );
-  }
+def save_db():
+    try:
+        requests.delete(SDB_URL+"/all",timeout=3)
+        requests.post(SDB_URL,json=[{
+            "text":r["text"],
+            "fav":"true" if r["fav"] else "false",
+            "nazev":r["title"]
+        } for r in st.session_state.recipes],timeout=3)
+    except: pass
+    save_local(st.session_state.recipes)
 
-  function addIng(id) {
-    setRecipes(
-      recipes.map(r =>
-        r.id === id ? { ...r, ingredients: [...r.ingredients, ""] } : r
-      )
-    );
-  }
+if not st.session_state.recipes:
+    st.session_state.recipes=load_db()
 
-  // FAVORITE
-  function toggleFav(id) {
-    setRecipes(
-      recipes.map(r =>
-        r.id === id ? { ...r, fav: !r.fav } : r
-      )
-    );
-  }
+# ---------- DESIGN ----------
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&display=swap');
 
-  // HIGHLIGHT TEXT
-  function highlight(text) {
-    if (!query) return text;
-    const parts = text.split(new RegExp(`(${query})`, "gi"));
-    return parts.map((p, i) =>
-      p.toLowerCase() === query.toLowerCase() ? (
-        <mark key={i}>{p}</mark>
-      ) : (
-        p
-      )
-    );
-  }
-
-  return (
-    <div style={styles.app}>
-      
-      {/* TOP BAR */}
-      <div style={styles.top}>
-        <div style={styles.icons}>
-          <button onClick={addRecipe}>＋</button>
-          <button onClick={() => setQuery("")}>⟳</button>
-          <button>🔍</button>
-          <button>🔑</button>
-        </div>
-
-        <h1 style={styles.title}>Márova kuchařka</h1>
-
-        <input
-          style={styles.search}
-          placeholder="Hledat recept nebo ingredienci..."
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-        />
-
-        <div style={styles.count}>
-          {filtered.length} receptů
-        </div>
-      </div>
-
-      {/* LIST */}
-      <div>
-        {filtered.map(r => (
-          <div
-            key={r.id}
-            style={{
-              ...styles.card,
-              animation: "fade .25s"
-            }}
-          >
-            {/* HEADER */}
-            <div style={styles.row}>
-              <b onClick={() => setOpenId(openId === r.id ? null : r.id)}>
-                {highlight(r.name)}
-              </b>
-
-              <div>
-                <button onClick={() => toggleFav(r.id)}>
-                  {r.fav ? "⭐" : "☆"}
-                </button>
-
-                <button onClick={() => del(r.id)}>🗑</button>
-              </div>
-            </div>
-
-            {/* DETAIL */}
-            {openId === r.id && (
-              <div style={styles.detail}>
-                <input
-                  style={styles.input}
-                  value={r.name}
-                  onChange={e => update(r.id, "name", e.target.value)}
-                />
-
-                {r.ingredients.map((ing, i) => (
-                  <input
-                    key={i}
-                    style={styles.input}
-                    value={ing}
-                    onChange={e => updateIng(r.id, i, e.target.value)}
-                    placeholder="Ingredience"
-                  />
-                ))}
-
-                <button onClick={() => addIng(r.id)}>+ ingredience</button>
-
-                <textarea
-                  style={styles.textarea}
-                  value={r.text}
-                  onChange={e => update(r.id, "text", e.target.value)}
-                  placeholder="Postup"
-                />
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-
-      <style>{`
-        @keyframes fade {
-          from {opacity:0; transform:translateY(6px)}
-          to {opacity:1; transform:translateY(0)}
-        }
-      `}</style>
-    </div>
-  );
+body,[data-testid="stAppViewContainer"]{
+ background:radial-gradient(circle at bottom,#000428,#004e92);
+ color:white;
 }
 
-const styles = {
-  app: {
-    fontFamily: "sans-serif",
-    padding: 15,
-    background: "linear-gradient(160deg,#0b1d3a,#133a7c)",
-    minHeight: "100vh",
-    color: "white"
-  },
+.topbar{
+ display:flex;
+ justify-content:center;
+ gap:6px;
+ margin-top:-10px;
+ margin-bottom:5px;
+}
 
-  top: { textAlign: "center" },
+.topbtn{
+ background:#0099ff;
+ color:white;
+ border:none;
+ padding:6px 10px;
+ border-radius:8px;
+ font-size:17px;
+ cursor:pointer;
+ transition:.2s;
+}
 
-  icons: {
-    display: "flex",
-    justifyContent: "center",
-    gap: 6,
-    marginBottom: 5
-  },
+.topbtn:hover{
+ transform:scale(1.12);
+ background:#00bbff;
+}
 
-  title: {
-    fontFamily: "Dancing Script",
-    fontSize: "1.8rem",
-    margin: 4
-  },
+.title{
+ font-family:'Dancing Script',cursive;
+ font-size:20px;
+ text-align:center;
+ color:#00ccff;
+ margin-bottom:10px;
+}
 
-  search: {
-    padding: 6,
-    borderRadius: 8,
-    border: "none",
-    marginTop: 4
-  },
+.stExpanderHeader{
+ background:#1E3A8A !important;
+ color:white !important;
+ border-radius:10px;
+}
 
-  count: {
-    opacity: 0.7,
-    fontSize: 13,
-    marginTop: 3
-  },
+.stExpanderContent{
+ background:#cce0ff !important;
+ color:black;
+ border-radius:10px;
+}
+</style>
+""",unsafe_allow_html=True)
 
-  card: {
-    background: "#1e3a8a",
-    padding: 12,
-    borderRadius: 14,
-    marginTop: 10
-  },
+# ---------- TOP BAR ----------
+clicked=st.experimental_get_query_params().get("btn",[""])[0]
 
-  row: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center"
-  },
+st.markdown("""
+<div class="topbar">
+<a href="?btn=new"><button class="topbtn">➕</button></a>
+<a href="?btn=sync"><button class="topbtn">🔄</button></a>
+<a href="?btn=search"><button class="topbtn">🔍</button></a>
+<a href="?btn=fav"><button class="topbtn">⭐</button></a>
+<a href="?btn=api"><button class="topbtn">🔑</button></a>
+</div>
+""",unsafe_allow_html=True)
 
-  detail: {
-    marginTop: 10,
-    display: "flex",
-    flexDirection: "column",
-    gap: 6
-  },
+# ---------- ACTIONS ----------
+if clicked=="new":
+    st.session_state.show_new=not st.session_state.show_new
 
-  input: {
-    padding: 6,
-    borderRadius: 6,
-    border: "none"
-  },
+if clicked=="search":
+    st.session_state.show_search=not st.session_state.show_search
 
-  textarea: {
-    padding: 6,
-    borderRadius: 6,
-    border: "none"
-  }
-};
+if clicked=="api":
+    st.session_state.show_api=not st.session_state.show_api
+
+if clicked=="sync":
+    save_db()
+
+if clicked=="fav":
+    st.session_state.fav_only=not st.session_state.fav_only
+
+# ---------- TITLE ----------
+st.markdown('<div class="title">Márova kuchařka</div>',unsafe_allow_html=True)
+
+# ---------- API ----------
+if st.session_state.show_api:
+    st.session_state.api=st.text_input("API klíč",type="password")
+
+# ---------- SEARCH ----------
+search=""
+if st.session_state.show_search:
+    search=st.text_input("Hledat recept nebo ingredienci")
+
+# ---------- NEW ----------
+if st.session_state.show_new:
+
+    tab1,tab2=st.tabs(["Text","Foto"])
+
+    with tab1:
+        with st.form("add"):
+            txt=st.text_area("Text")
+            title=st.text_input("Název")
+            if st.form_submit_button("Uložit"):
+                if txt:
+                    st.session_state.recipes.insert(0,{
+                        "title":title or "Bez názvu",
+                        "text":ai(txt),
+                        "fav":False
+                    })
+                    save_db()
+                    st.experimental_rerun()
+
+    with tab2:
+        img=st.file_uploader("Foto",type=["jpg","png"])
+        title2=st.text_input("Název foto")
+        if img and st.button("Uložit foto"):
+            st.session_state.recipes.insert(0,{
+                "title":title2 or "Bez názvu",
+                "text":ai(Image.open(img)),
+                "fav":False
+            })
+            save_db()
+            st.experimental_rerun()
+
+# ---------- FILTER ----------
+recipes=sorted(st.session_state.recipes,key=lambda x: not x["fav"])
+
+# ---------- LIST ----------
+for i,r in enumerate(recipes):
+
+    if st.session_state.fav_only and not r["fav"]:
+        continue
+
+    if search:
+        if search.lower() not in (r["title"]+" "+r["text"]).lower() and all(search.lower() not in ing.lower() for ing in r.get("ingredients",[])):
+            continue
+
+    with st.expander(r["title"]):
+
+        star="⭐" if r["fav"] else "☆"
+        if st.button(star,key=f"fav{i}"):
+            r["fav"]=not r["fav"]
+            save_db()
+            st.experimental_rerun()
+
+        nt=st.text_input("Název",r["title"],key=f"t{i}")
+        tx=st.text_area("Text",r["text"],key=f"x{i}",height=250)
+
+        c1,c2=st.columns(2)
+
+        with c1:
+            if st.button("💾 Uložit",key=f"s{i}"):
+                r["title"]=nt
+                r["text"]=tx
+                save_db()
+                st.experimental_rerun()
+
+        with c2:
+            if st.button("🗑 Smazat",key=f"d{i}"):
+                st.session_state.recipes.remove(r)
+                save_db()
+                st.experimental_rerun()
