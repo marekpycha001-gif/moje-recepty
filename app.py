@@ -25,19 +25,29 @@ XXXst.session_state.editing_index = None
 
 def db_save():
 XXXtry:
-XXXXXX# Diagnostika: Zkusime smazat a zapsat
+XXXXXXst.toast("Zkousim smazat vse...")
 XXXXXXdel_res = requests.delete(SDB_URL + "/all")
 XXXXXXif st.session_state.recipes:
 XXXXXXXXXdata = [{"text": r["text"], "fav": str(r["fav"]).lower()} for r in st.session_state.recipes]
 XXXXXXXXXpost_res = requests.post(SDB_URL, json={"data": data})
 XXXXXXXXXif post_res.status_code == 201:
-XXXXXXXXXXXXst.toast("Ulozeno do tabulky! ✅")
+XXXXXXXXXXXXst.toast("Hotovo! Ulozeno do tabulky ✅")
 XXXXXXXXXelse:
-XXXXXXXXXXXXst.error(f"Chyba SheetDB ({post_res.status_code}): {post_res.text}")
+XXXXXXXXXXXXst.error(f"SheetDB Error {post_res.status_code}: {post_res.text}")
 XXXXXXelse:
-XXXXXXXXXst.toast("Tabulka promazana (seznam je prazdny).")
+XXXXXXXXXst.info("Seznam je prazdny.")
 XXXexcept Exception as e:
-XXXXXXst.error(f"Chyba spojeni: {e}")
+XXXXXXst.error(f"Kriticka chyba: {e}")
+
+st.title("🍳 Muj chytry receptar")
+
+TESTOVACI TLACITKO V SIDEBARU
+if st.sidebar.button("🚨 NATVRDO ULOZIT TEST"):
+XXXst.session_state.recipes.insert(0, {"text": "NAZEV: Testovaci recept", "fav": True})
+XXXdb_save()
+XXXst.rerun()
+
+api = st.sidebar.text_input("Vlozit API klic", type="password")
 
 def analyze(content, api_key):
 XXXtry:
@@ -45,14 +55,10 @@ XXXXXXgenai.configure(api_key=api_key)
 XXXXXXmodels = [m.name for m in genai.list_models() if "generateContent" in m.supported_generation_methods]
 XXXXXXm_name = next((m for m in models if "flash" in m), models[0])
 XXXXXXmodel = genai.GenerativeModel(m_name)
-XXXXXXp = "Jsi expert na vareni. Vsechny miry dej na gramy (g). Format: NAZEV: [Nazev], INGREDIENCE: - [cislo] [jednotka] [surovina], POSTUP: 1. [Krok]"
-XXXXXXwith st.spinner("Cimilali maka..."):
-XXXXXXXXXres = model.generate_content([p, content])
-XXXXXXXXXreturn res.text
+XXXXXXp = "Jsi expert na vareni. Format: NAZEV: [Nazev], INGREDIENCE: - [surovina], POSTUP: 1. [Krok]"
+XXXXXXres = model.generate_content([p, content])
+XXXXXXreturn res.text
 XXXexcept Exception as e: return str(e)
-
-st.title("🍳 Muj chytry receptar")
-api = st.sidebar.text_input("Vlozit API klic", type="password")
 
 if api:
 XXXt1, t2 = st.tabs(["Text", "Foto"])
@@ -62,48 +68,27 @@ XXXXXXXXXu = st.text_area("Vlozit text:")
 XXXXXXXXXif st.form_submit_button("Cimilali"):
 XXXXXXXXXXXXif u:
 XXXXXXXXXXXXXXXr_t = analyze(u, api)
-XXXXXXXXXXXXXXXif "quota" not in str(r_t).lower() and "429" not in str(r_t):
+XXXXXXXXXXXXXXXif "Part" not in str(r_t) and "quota" not in str(r_t).lower():
 XXXXXXXXXXXXXXXXXXst.session_state.recipes.insert(0, {"text": r_t, "fav": False})
 XXXXXXXXXXXXXXXXXXdb_save()
 XXXXXXXXXXXXXXXXXXst.rerun()
-XXXXXXXXXXXXXXXelse: st.error("Limit Gemini vycerpan.")
+XXXXXXXXXXXXXXXelse: st.error(f"Chyba Gemini: {r_t}")
 XXXwith t2:
 XXXXXXf = st.file_uploader("Foto", type=["jpg", "png"])
 XXXXXXif f and st.button("Cimilali", key="c2"):
 XXXXXXXXXr_t = analyze(Image.open(f), api)
-XXXXXXXXXif "quota" not in str(r_t).lower() and "429" not in str(r_t):
-XXXXXXXXXXXXst.session_state.recipes.insert(0, {"text": r_t, "fav": False})
-XXXXXXXXXXXXdb_save()
-XXXXXXXXXXXXst.rerun()
-XXXXXXXXXelse: st.error("Limit Gemini vycerpan.")
-else:
-XXXst.info("Vlozit klic vlevo.")
-
-for i, r in enumerate(st.session_state.recipes):
-XXXif st.session_state.editing_index == i:
-XXXXXXnt = st.text_area("Edit", r["text"], height=300, key=f"e_{i}")
-XXXXXXif st.button("Ulozit", key=f"s_{i}"):
-XXXXXXXXXst.session_state.recipes[i]["text"] = nt
-XXXXXXXXXst.session_state.editing_index = None
+XXXXXXXXXst.session_state.recipes.insert(0, {"text": r_t, "fav": False})
 XXXXXXXXXdb_save()
 XXXXXXXXXst.rerun()
-XXXelse:
-XXXXXXn = "Recept"
-XXXXXXfor l in str(r["text"]).splitlines():
-XXXXXXXXXif "NAZEV:" in l.upper(): n = l.split(":", 1)[1]
-XXXXXXwith st.expander(f"{'❤️' if r.get('fav') else '🤍'} {n}"):
-XXXXXXXXXst.markdown(r["text"])
-XXXXXXXXXc1, c2, c3 = st.columns(3)
-XXXXXXXXXif c1.button("❤️", key=f"f_{i}"):
-XXXXXXXXXXXXst.session_state.recipes[i]["fav"] = not r.get("fav")
-XXXXXXXXXXXXdb_save()
-XXXXXXXXXXXXst.rerun()
-XXXXXXXXXif c2.button("Upravit", key=f"ed_{i}"):
-XXXXXXXXXXXXst.session_state.editing_index = i
-XXXXXXXXXXXXst.rerun()
-XXXXXXXXXif c3.button("Smazat", key=f"d_{i}"):
-XXXXXXXXXXXXst.session_state.recipes.pop(i)
-XXXXXXXXXXXXdb_save()
-XXXXXXXXXXXXst.rerun()
+else:
+XXXst.info("Vloz klic v menu.")
+
+for i, r in enumerate(st.session_state.recipes):
+XXXwith st.expander(f"{'❤️' if r.get('fav') else '🤍'} {str(r['text'])[:30]}..."):
+XXXXXXst.markdown(r["text"])
+XXXXXXif st.button("Smazat", key=f"d_{i}"):
+XXXXXXXXXst.session_state.recipes.pop(i)
+XXXXXXXXXdb_save()
+XXXXXXXXXst.rerun()
 """
 exec(CODE.replace("XXX", "    "))
