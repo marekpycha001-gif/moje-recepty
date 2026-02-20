@@ -146,7 +146,7 @@ textarea, input[type=text], input[type=number] {font-size:16px; padding:5px; col
 # -------- HORNÍ PANEL (název + ikonky natěsnané) --------
 cols = st.columns([4,0.5,0.5,0.5])
 with cols[0]:
-    st.markdown("<h1>Márova kuchařka 🌌</h1>", unsafe_allow_html=True)
+    st.markdown("<h1>Márova kuchařka </h1>", unsafe_allow_html=True)
 with cols[1]:
     if st.button("➕"):
         st.session_state.show_new_recipe = not st.session_state.get("show_new_recipe", False)
