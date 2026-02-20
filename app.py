@@ -72,46 +72,50 @@ body,[data-testid="stAppViewContainer"]{
  color:white;
 }
 
-/* TOP BAR */
+/* TOP BAR MOBILE */
 .topbar{
  display:flex;
  justify-content:center;
- gap:6px;
- margin-top:-10px;
- margin-bottom:5px;
- flex-wrap:wrap;
+ gap:4px;
+ margin-bottom:8px;
+ flex-wrap:nowrap;
+ overflow-x:auto;
 }
 
 .topbtn{
  background:#0099ff;
  color:white;
  border:none;
- padding:6px 10px;
- border-radius:8px;
- font-size:18px;
+ padding:4px 6px;
+ border-radius:6px;
+ font-size:16px;
  cursor:pointer;
+ min-width:40px;
+ text-align:center;
 }
 
 /* TITLE */
 .title{
  font-family:'Dancing Script',cursive;
- font-size:20px;
+ font-size:18px;
  text-align:center;
  color:#00ccff;
- margin-bottom:10px;
+ margin-bottom:8px;
 }
 
 /* EXPANDER */
 .stExpanderHeader{
  background:#1E3A8A !important;
  color:white !important;
- border-radius:10px;
+ border-radius:8px;
 }
 
 .stExpanderContent{
  background:#cce0ff !important;
  color:black;
- border-radius:10px;
+ border-radius:8px;
+ max-height:300px;
+ overflow-y:auto;
 }
 
 /* INPUTS */
@@ -120,18 +124,16 @@ label, .stTextInput label, .stNumberInput label {color:#ffffff !important; font-
 </style>
 """,unsafe_allow_html=True)
 
-# ---------- TOP ICON BAR (bez refreshu) ----------
-st.markdown('<div class="topbar">', unsafe_allow_html=True)
-col1, col2, col3, col4 = st.columns([1,1,1,1])
-with col1:
+# ---------- TOP ICON BAR (mobile friendly) ----------
+top_cols = st.columns([1,1,1,1], gap="small")
+with top_cols[0]:
     if st.button("➕"): st.session_state.show_new = not st.session_state.show_new
-with col2:
+with top_cols[1]:
     if st.button("🔄"): save_db()
-with col3:
+with top_cols[2]:
     if st.button("🔍"): st.session_state.show_search = not st.session_state.show_search
-with col4:
+with top_cols[3]:
     if st.button("🔑"): st.session_state.show_api = not st.session_state.show_api
-st.markdown('</div>', unsafe_allow_html=True)
 
 # ---------- TITLE ----------
 st.markdown('<div class="title">Márova kuchařka</div>',unsafe_allow_html=True)
@@ -175,8 +177,6 @@ if st.session_state.show_new:
 
 # ---------- LIST ----------
 for i,r in enumerate(st.session_state.recipes):
-
-    # filtr podle vyhledávání
     if search and search.lower() not in r["title"].lower() and search.lower() not in r["text"].lower():
         continue
 
