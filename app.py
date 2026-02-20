@@ -82,16 +82,18 @@ body,[data-testid="stAppViewContainer"]{
  overflow-x:auto;
 }
 
+/* malé čtverečky ikon */
 .topbtn{
  background:#0099ff;
  color:white;
  border:none;
- padding:4px 6px;
+ padding:6px 6px;
  border-radius:6px;
- font-size:16px;
+ font-size:18px;
  cursor:pointer;
  min-width:40px;
  text-align:center;
+ line-height:1;
 }
 
 /* TITLE */
@@ -124,16 +126,21 @@ label, .stTextInput label, .stNumberInput label {color:#ffffff !important; font-
 </style>
 """,unsafe_allow_html=True)
 
-# ---------- TOP ICON BAR (mobile friendly) ----------
-top_cols = st.columns([1,1,1,1], gap="small")
-with top_cols[0]:
-    if st.button("➕"): st.session_state.show_new = not st.session_state.show_new
-with top_cols[1]:
-    if st.button("🔄"): save_db()
-with top_cols[2]:
-    if st.button("🔍"): st.session_state.show_search = not st.session_state.show_search
-with top_cols[3]:
-    if st.button("🔑"): st.session_state.show_api = not st.session_state.show_api
+# ---------- TOP ICON BAR (malé a vedle sebe, střed) ----------
+st.markdown("""
+<div style="display:flex; justify-content:center; gap:4px; flex-wrap:nowrap; overflow-x:auto; margin-bottom:8px;">
+    <button class="topbtn" onclick="document.querySelector('#plus').click()">➕</button>
+    <button class="topbtn" onclick="document.querySelector('#sync').click()">🔄</button>
+    <button class="topbtn" onclick="document.querySelector('#search').click()">🔍</button>
+    <button class="topbtn" onclick="document.querySelector('#key').click()">🔑</button>
+</div>
+""",unsafe_allow_html=True)
+
+# interní tlačítka pro Streamlit
+if st.button("", key="plus"): st.session_state.show_new = not st.session_state.show_new
+if st.button("", key="sync"): save_db()
+if st.button("", key="search"): st.session_state.show_search = not st.session_state.show_search
+if st.button("", key="key"): st.session_state.show_api = not st.session_state.show_api
 
 # ---------- TITLE ----------
 st.markdown('<div class="title">Márova kuchařka</div>',unsafe_allow_html=True)
