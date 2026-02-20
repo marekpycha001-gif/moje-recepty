@@ -15,11 +15,23 @@ LOCAL_FILE = "recipes.json"
 
 # ---------- AI ----------
 def analyze(content, api_key):
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-1.5-flash")
-    prompt = "Jsi expert na vareni. Format: NAZEV: [Nazev], PORCE: [pocet], INGREDIENCE: - 100 g cukr, POSTUP: 1. [Krok]"
-    res = model.generate_content([prompt, content])
-    return res.text
+    try:
+        genai.configure(api_key=api_key)
+
+        models = [
+            m.name for m in genai.list_models()
+            if "generateContent" in m.supported_generation_methods
+        ]
+
+        model_name = next((m for m in models if "flash" in m.lower()), models[0])
+        model = genai.GenerativeModel(model_name)
+
+        prompt = "Jsi expert na vareni. Format: NAZEV: [Nazev], PORCE: [pocet], INGREDIENCE: - 100 g cukr, POSTUP: 1. [Krok]"
+        res = model.generate_content([prompt, content])
+        return res.text
+
+    except Exception as e:
+        return f"CHYBA AI: {e}"
 
 
 # ---------- LOCAL ----------
@@ -53,21 +65,30 @@ if "recipes" not in st.session_state:
 # ---------- SAVE ----------
 def db_save():
     data = [{"text": r["text"], "fav": r["fav"]} for r in st.session_state.recipes]
+
     try:
-        requests.post(SDB_URL, json=[
-            {"text": r["text"], "fav": "true" if r["fav"] else "false"}
-            for r in st.session_state.recipes
-        ], timeout=3)
+        requests.post(
+            SDB_URL,
+            json=[
+                {"text": r["text"], "fav": "true" if r["fav"] else "false"}
+                for r in st.session_state.recipes
+            ],
+            timeout=3,
+        )
         save_local(data)
+        st.toast("☁️ Uloženo online")
+
     except:
         save_local(data)
+        st.toast("💾 Uloženo offline")
 
 
-# ---------- PORCE ----------
+# ---------- SCALE ----------
 def scale_recipe(text, factor):
     def repl(match):
         num = float(match.group())
         return str(round(num * factor, 2))
+
     return re.sub(r"\d+(\.\d+)?", repl, text)
 
 
@@ -94,15 +115,31 @@ def export_pdf():
         return None
 
 
+# ---------- SYNC ----------
+def sync_online():
+    try:
+        requests.post(
+            SDB_URL,
+            json=[
+                {"text": r["text"], "fav": "true" if r["fav"] else "false"}
+                for r in st.session_state.recipes
+            ],
+            timeout=3,
+        )
+        st.success("Synchronizováno s cloudem ✅")
+    except:
+        st.error("Nelze se připojit")
+
+
 # ---------- UI ----------
 st.title("🍳 Můj chytrý receptář")
 
 search = st.text_input("🔎 Hledat recept")
 
-if st.button("🔄 Synchronizovat"):
-    db_save()
-    st.success("Synchronizováno")
-
+colA, colB = st.columns([3, 1])
+with colB:
+    if st.button("🔄 Synchronizovat"):
+        sync_online()
 
 api = st.sidebar.text_input("API klíč", type="password")
 
@@ -136,12 +173,12 @@ for i, r in enumerate(st.session_state.recipes):
 
     with st.expander(f"{'⭐ ' if r['fav'] else ''} Recept {i+1}"):
 
-        factor = st.number_input("Porce násobek", 0.1, 10.0, 1.0, 0.1, key=f"scale{i}")
+        factor = st.number_input("Násobek porcí", 0.1, 10.0, 1.0, 0.1, key=f"scale{i}")
         scaled = scale_recipe(r["text"], factor)
 
         edited = st.text_area("Text", scaled, key=f"edit{i}", height=200)
 
-        if st.button("💾 Uložit změny", key=f"s{i}"):
+        if st.button("💾 Uložit", key=f"s{i}"):
             st.session_state.recipes[i]["text"] = edited
             db_save()
             st.rerun()
@@ -162,4 +199,6 @@ st.divider()
 if st.button("📄 Export PDF"):
     pdf = export_pdf()
     if pdf:
-        st.download_button("Stáhnout", pdf, "kucharka.pdf")
+        st.download_button("Stáhnout PDF", pdf, "kucharka.pdf")
+    else:
+        st.error("Nejdřív nainstaluj knihovnu: pip install reportlab")
