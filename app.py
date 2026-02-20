@@ -54,9 +54,7 @@ if "recipes" not in st.session_state:
 def db_save():
     data = [{"title": r["title"], "text": r["text"], "fav": r["fav"]} for r in st.session_state.recipes]
     try:
-        # smaže cloud
         requests.delete(SDB_URL + "/all", timeout=3)
-        # nahraje aktuální data
         requests.post(
             SDB_URL,
             json=[{"title": r["title"], "text": r["text"], "fav": "true" if r["fav"] else "false"} for r in st.session_state.recipes],
@@ -128,11 +126,9 @@ if api:
             text_input = st.text_area("Vložit text")
             submit_btn = st.form_submit_button("Čimilali")
             if submit_btn and text_input:
-                # správné volání AI a uložení výsledku
                 r_t = analyze(text_input, api)
                 st.session_state.recipes.insert(0, {"title": title_input, "text": r_t, "fav": False})
                 db_save()
-                st.experimental_rerun()
 
     with tab2:
         f = st.file_uploader("Foto", type=["jpg", "png"])
@@ -140,10 +136,9 @@ if api:
             r_t = analyze(Image.open(f), api)
             st.session_state.recipes.insert(0, {"title": "", "text": r_t, "fav": False})
             db_save()
-            st.experimental_rerun()
 
 # ---------- LIST ----------
-for i, r in enumerate(st.session_state.recipes):
+for i, r in enumerate(list(st.session_state.recipes)):
     if search and search.lower() not in r["text"].lower() and search.lower() not in r["title"].lower():
         continue
 
@@ -160,17 +155,14 @@ for i, r in enumerate(st.session_state.recipes):
             st.session_state.recipes[i]["title"] = title_edit
             st.session_state.recipes[i]["text"] = edited
             db_save()
-            st.experimental_rerun()
 
         if c2.button("⭐ Oblíbený", key=f"f{i}"):
             st.session_state.recipes[i]["fav"] = not st.session_state.recipes[i]["fav"]
             db_save()
-            st.experimental_rerun()
 
         if c3.button("🗑 Smazat", key=f"d{i}"):
             st.session_state.recipes.pop(i)
             db_save()
-            st.experimental_rerun()
 
 # ---------- EXPORT ----------
 st.divider()
