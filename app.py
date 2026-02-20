@@ -94,7 +94,7 @@ label, .stTextInput label, .stNumberInput label {color:#ffffff !important; font-
 </style>
 """, unsafe_allow_html=True)
 
-# ---------- IKONY NAHORU JEDEN RADEK ----------
+# ---------- IKONY ----------
 st.markdown("""
 <div class="icon-row">
     <button onclick="document.querySelector('#plus').click()">➕</button>
@@ -104,21 +104,36 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-if st.button("plus", key="plus"): st.session_state.show_new_recipe = not st.session_state.show_new_recipe
-if st.button("sync", key="sync"): db_save()
-if st.button("search", key="search"): st.session_state.show_search = not st.session_state.show_search
-if st.button("key", key="key"): st.session_state.show_api_input = not st.session_state.show_api_input
+# ---------- SKRYTÁ FUNKČNÍ TLAČÍTKA ----------
+st.markdown('<div style="display:none">', unsafe_allow_html=True)
 
+if st.button("plus", key="plus"):
+    st.session_state.show_new_recipe = not st.session_state.show_new_recipe
+
+if st.button("sync", key="sync"):
+    db_save()
+
+if st.button("search", key="search"):
+    st.session_state.show_search = not st.session_state.show_search
+
+if st.button("key", key="key"):
+    st.session_state.show_api_input = not st.session_state.show_api_input
+
+st.markdown('</div>', unsafe_allow_html=True)
+
+# ---------- NADPIS ----------
 st.markdown('<h1 class="app-title">Márova kuchařka</h1>', unsafe_allow_html=True)
 
+# ---------- API ----------
 if st.session_state.show_api_input:
     st.session_state.api_key = st.text_input("API klíč (jednou na spuštění)", type="password")
 
 search = st.text_input("Hledat recept") if st.session_state.show_search else ""
 
-# ---------- NOVÝ RECEPT (SCHOVANÝ) ----------
+# ---------- NOVÝ RECEPT ----------
 if st.session_state.show_new_recipe:
     t1, t2 = st.tabs(["Text", "Foto"])
+
     with t1:
         with st.form("t_form", clear_on_submit=True):
             u = st.text_area("Vložit text:")
@@ -129,6 +144,7 @@ if st.session_state.show_new_recipe:
                     st.session_state.recipes.insert(0, {"title": title or "Bez názvu", "text": r_t, "fav": False, "img": ""})
                     db_save()
                     st.experimental_rerun()
+
     with t2:
         f = st.file_uploader("Foto", type=["jpg","png"])
         title2 = st.text_input("Název receptu (foto)")
@@ -138,8 +154,11 @@ if st.session_state.show_new_recipe:
             db_save()
             st.experimental_rerun()
 
-# ---------- ZOBRAZENÍ RECEPTŮ ----------
+# ---------- RECEPTY ----------
 for i, r in enumerate(st.session_state.recipes):
+    if search and search.lower() not in (r["title"]+r["text"]).lower():
+        continue
+
     with st.expander(f"{r['title']}"):
         st.write(r["text"])
         if st.button("Smazat", key=f"d_{i}"):
