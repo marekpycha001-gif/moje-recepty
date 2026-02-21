@@ -24,8 +24,16 @@ for k, v in defaults.items():
 def ai(txt):
     try:
         genai.configure(api_key=st.session_state.api)
-        model = genai.GenerativeModel("gemini-1.5-flash")
+
+        models = genai.list_models()
+        usable = [m.name for m in models if "generateContent" in m.supported_generation_methods]
+
+        if not usable:
+            return "AI chyba: žádný dostupný model"
+
+        model = genai.GenerativeModel(usable[0])
         return model.generate_content(txt).text
+
     except Exception as e:
         return f"AI chyba: {e}"
 
@@ -74,7 +82,6 @@ body,[data-testid="stAppViewContainer"]{
  color:white;
 }
 
-/* TITLE */
 .title{
  font-family:'Dancing Script',cursive;
  font-size:18px;
@@ -83,7 +90,6 @@ body,[data-testid="stAppViewContainer"]{
  margin-bottom:6px;
 }
 
-/* ICON BUTTONS */
 div.stButton > button {
  background:#0099ff;
  color:white;
@@ -94,7 +100,6 @@ div.stButton > button {
  padding:0px;
 }
 
-/* EXPANDER */
 .stExpanderHeader{
  background:#1E3A8A !important;
  color:white !important;
@@ -109,7 +114,6 @@ div.stButton > button {
  overflow-y:auto;
 }
 
-/* INPUT LABELS */
 label {color:white !important;}
 </style>
 """, unsafe_allow_html=True)
