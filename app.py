@@ -1,7 +1,7 @@
 import streamlit as st
 import google.generativeai as genai
 from PIL import Image
-import requests, json, os
+import requests, json, os, re
 
 st.set_page_config(page_title="Márova kuchařka", page_icon="🍳", layout="centered")
 
@@ -20,9 +20,8 @@ def ai_generate(txt):
         return "⚠️ Zadej API klíč"
     try:
         genai.configure(api_key=st.session_state.api)
-        # dynamicky vybere dostupný model podporující generate_content
         models = genai.list_models()
-        available_models = [m["name"] for m in models if "generateContent" in m.get("supported_methods", [])]
+        available_models = [m.name for m in models if "generateContent" in getattr(m, "supported_methods", [])]
         if not available_models:
             return "⚠️ Žádný dostupný model nepodporuje generate_content"
         model_name = available_models[0]
@@ -133,8 +132,6 @@ if st.session_state.show_new:
             if st.form_submit_button("Vygenerovat z webu") and url:
                 try:
                     page = requests.get(url, timeout=5).text
-                    # vybere jen text mezi <p> bez bs4
-                    import re
                     paragraphs = re.findall(r'<p.*?>(.*?)</p>', page, flags=re.S)
                     text_content = " ".join([re.sub(r'<.*?>', '', p) for p in paragraphs])
                     gen_txt = ai_generate(text_content)
@@ -177,6 +174,5 @@ for i, r in enumerate(st.session_state.recipes):
                 save_db()
         with d_col:
             if st.button("🗑", key=f"d{i}"):
-                # bezpečné mazání bez pop() uvnitř loop
                 st.session_state.recipes = [rec for idx, rec in enumerate(st.session_state.recipes) if idx != i]
                 save_db(); st.experimental_rerun()
