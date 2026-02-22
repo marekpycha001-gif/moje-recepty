@@ -21,38 +21,14 @@ for k,v in defaults.items():
         st.session_state[k]=v
 
 # ---------- AI ----------
-def ai_generate(content):
-
-    if not st.session_state.api:
-        return "❌ Nejprve vlož API klíč"
-
+def ai_generate(txt):
     try:
+        if not st.session_state.api:
+            return "⚠️ Zadej API klíč"
         genai.configure(api_key=st.session_state.api)
-
-        model = genai.GenerativeModel("gemini-1.5-flash-latest")
-
-        prompt = """
-Jsi kuchařský asistent.
-Vždy odpovídej ČESKY.
-Shrň recept do struktury:
-
-NÁZEV:
-INGREDIENCE:
-POSTUP:
-DOBA:
-KALORIE:
-
-Text:
-"""
-
-        res = model.generate_content([prompt, content])
-
-        # fallback když model odmítne odpovědět
-        if not res.candidates:
-            return "⚠️ AI nevrátila odpověď (pravděpodobně copyright blokace). Zkus jiný text nebo screenshot."
-
-        return res.text
-
+        model = genai.GenerativeModel("models/text-bison-001")
+        prompt = f"Jsi expert na vaření. Přelož vše do češtiny. {txt}"
+        return model.generate_content([prompt]).text
     except Exception as e:
         return f"AI chyba: {e}"
 
@@ -62,33 +38,51 @@ def load_local():
         return json.load(open(LOCAL_FILE,encoding="utf8"))
     return []
 
-def save_local(data):
+def save_local(d):
     with open(LOCAL_FILE,"w",encoding="utf8") as f:
-        json.dump(data,f,ensure_ascii=False,indent=2)
+        json.dump(d,f,ensure_ascii=False,indent=2)
 
 def load_db():
+    recipes=[]
     try:
-        r=requests.get(SDB_URL,timeout=5)
+        r=requests.get(SDB_URL,timeout=3)
         if r.status_code==200:
-            return [{
-                "title":x.get("nazev","Bez názvu"),
-                "text":x.get("text",""),
-                "fav":str(x.get("fav","")).lower()=="true"
-            } for x in r.json()]
-    except:
+            for x in r.json():
+                recipes.append({
+                    "title": x.get("nazev","Bez názvu"),
+                    "text": x.get("text",""),
+                    "fav": str(x.get("fav","False")).lower()=="true",
+                    "img": x.get("img",""),
+                    "time": x.get("time",""),
+                    "calories": x.get("calories","")
+                })
+    except: 
         pass
-    return load_local()
+    if not recipes:
+        recipes=load_local()
+    # zajistí defaulty
+    for r in recipes:
+        if not r.get("title"): r["title"]="Bez názvu"
+        if not r.get("text"): r["text"]=""
+        if "fav" not in r: r["fav"]=False
+        if "img" not in r: r["img"]=""
+        if "time" not in r: r["time"]=""
+        if "calories" not in r: r["calories"]=""
+    return recipes
 
 def save_db():
     try:
-        requests.delete(SDB_URL+"/all",timeout=5)
+        # vymazat a poslat vše nové
+        requests.delete(SDB_URL+"/all",timeout=3)
         requests.post(SDB_URL,json=[{
             "text":r["text"],
-            "fav":"true" if r["fav"] else "false",
-            "nazev":r["title"]
-        } for r in st.session_state.recipes],timeout=5)
-    except:
-        pass
+            "fav":"true" if r.get("fav",False) else "false",
+            "nazev":r["title"],
+            "img":r.get("img",""),
+            "time":r.get("time",""),
+            "calories":r.get("calories","")
+        } for r in st.session_state.recipes],timeout=3)
+    except: pass
     save_local(st.session_state.recipes)
 
 if not st.session_state.recipes:
@@ -104,33 +98,32 @@ body,[data-testid="stAppViewContainer"]{
  color:white;
 }
 
-/* IKONY */
-.iconbar{
+.topbar{
  display:flex;
  justify-content:center;
- gap:6px;
- margin-bottom:8px;
-}
-.iconbar button{
- width:38px;
- height:38px;
- font-size:18px;
- border-radius:8px;
- border:none;
- background:#0099ff;
- color:white;
+ gap:4px;
+ margin-bottom:5px;
+ flex-wrap:nowrap;
 }
 
-/* TITLE */
+.topbtn{
+ background:#0099ff;
+ color:white;
+ border:none;
+ padding:5px 8px;
+ border-radius:6px;
+ font-size:18px;
+ cursor:pointer;
+}
+
 .title{
  font-family:'Dancing Script',cursive;
- font-size:22px;
+ font-size:20px;
  text-align:center;
  color:#00ccff;
  margin-bottom:10px;
 }
 
-/* EXPANDER */
 .stExpanderHeader{
  background:#1E3A8A !important;
  color:white !important;
@@ -142,132 +135,134 @@ body,[data-testid="stAppViewContainer"]{
  color:black;
  border-radius:10px;
 }
+
+.stTextInput>div>div>input, .stNumberInput>div>div>input, textarea{
+ color:black;
+}
 </style>
 """,unsafe_allow_html=True)
 
-# ---------- ICON BAR ----------
-c1,c2,c3,c4=st.columns(4)
+# ---------- TOP ICON BAR ----------
+st.markdown(f"""
+<div class="topbar">
+<button class="topbtn" onclick="document.querySelector('#new').click()">➕</button>
+<button class="topbtn" onclick="document.querySelector('#sync').click()">🔄</button>
+<button class="topbtn" onclick="document.querySelector('#search').click()">🔍</button>
+<button class="topbtn" onclick="document.querySelector('#api').click()">🔑</button>
+</div>
+""",unsafe_allow_html=True)
 
-with c1:
-    if st.button("➕"):
-        st.session_state.show_new=not st.session_state.show_new
-
-with c2:
-    if st.button("🔄"):
-        save_db()
-
-with c3:
-    if st.button("🔍"):
-        st.session_state.show_search=not st.session_state.show_search
-
-with c4:
-    if st.button("🔑"):
-        st.session_state.show_api=not st.session_state.show_api
+# ---------- BUTTONS ----------
+if st.button("new", key="new"): st.session_state.show_new = not st.session_state.show_new
+if st.button("sync", key="sync"): save_db()
+if st.button("search", key="search"): st.session_state.show_search = not st.session_state.show_search
+if st.button("api", key="api"): st.session_state.show_api = not st.session_state.show_api
 
 # ---------- TITLE ----------
 st.markdown('<div class="title">Márova kuchařka</div>',unsafe_allow_html=True)
 
 # ---------- API ----------
 if st.session_state.show_api:
-    st.session_state.api=st.text_input("API klíč",type="password")
+    st.session_state.api = st.text_input("API klíč (jednou na spuštění)", type="password")
 
 # ---------- SEARCH ----------
 search=""
 if st.session_state.show_search:
-    search=st.text_input("Hledat název nebo ingredienci")
+    search = st.text_input("Hledat recept podle názvu/ingrediencí")
 
-# ---------- NEW ----------
+# ---------- NEW RECIPE ----------
 if st.session_state.show_new:
-
-    t1,t2,t3=st.tabs(["Ruční","Web","Obrázek"])
-
-    # RUČNÍ
-    with t1:
-        with st.form("manual"):
-            title=st.text_input("Název")
-            txt=st.text_area("Text receptu")
-            if st.form_submit_button("Uložit"):
+    t1,t2,t3=st.tabs(["Text","Web","Foto"])
+    
+    with t1:  # ručně zadat
+        with st.form("form_text"):
+            txt = st.text_area("Text receptu")
+            title = st.text_input("Název receptu")
+            time = st.text_input("Doba přípravy (min)")
+            cal = st.text_input("Kalorie")
+            if st.form_submit_button("Uložit text"):
                 if txt:
                     st.session_state.recipes.insert(0,{
                         "title":title or "Bez názvu",
-                        "text":txt,
-                        "fav":False
+                        "text": txt,
+                        "fav":False,
+                        "img":"",
+                        "time":time,
+                        "calories":cal
                     })
                     save_db()
                     st.rerun()
+                    
+    with t2:  # generace z webu
+        with st.form("form_web"):
+            url = st.text_input("URL receptu")
+            title2 = st.text_input("Název receptu")
+            if st.form_submit_button("Vygenerovat z webu"):
+                if url:
+                    try:
+                        if not url.startswith("http"):
+                            st.warning("Zadej platnou URL")
+                        else:
+                            page=requests.get(url,timeout=5).text
+                            gen_txt = ai_generate(page)
+                            st.session_state.recipes.insert(0,{
+                                "title": title2 or "Bez názvu",
+                                "text": gen_txt,
+                                "fav":False,
+                                "img":"",
+                                "time":"",
+                                "calories":""
+                            })
+                            save_db()
+                            st.rerun()
+                    except:
+                        st.warning("Stránku se nepodařilo načíst")
+                    
+    with t3:  # generace z obrázku
+        img = st.file_uploader("Foto", type=["jpg","png"])
+        title3 = st.text_input("Název receptu (foto)")
+        if img and st.button("Vygenerovat z obrázku"):
+            try:
+                gen_txt = ai_generate(Image.open(img))
+                st.session_state.recipes.insert(0,{
+                    "title": title3 or "Bez názvu",
+                    "text": gen_txt,
+                    "fav":False,
+                    "img":"",
+                    "time":"",
+                    "calories":""
+                })
+                save_db()
+                st.rerun()
+            except Exception as e:
+                st.warning(f"Chyba: {e}")
 
-    # WEB
-    with t2:
-        url=st.text_input("URL receptu")
-        titlew=st.text_input("Název z webu")
-
-        if st.button("Načíst z webu"):
-            if url:
-
-                if not url.startswith("http"):
-                    url="https://"+url
-
-                try:
-                    page=requests.get(url,timeout=10,headers={"User-Agent":"Mozilla/5.0"}).text
-                    result=ai_generate(page[:12000])
-
-                    st.session_state.recipes.insert(0,{
-                        "title":titlew or "Bez názvu",
-                        "text":result,
-                        "fav":False
-                    })
-                    save_db()
-                    st.rerun()
-
-                except:
-                    st.error("Stránku se nepodařilo načíst")
-
-    # OBRÁZEK
-    with t3:
-        img=st.file_uploader("Nahraj obrázek",type=["jpg","png","jpeg"])
-        titlei=st.text_input("Název obrázku")
-
-        if img and st.button("Vytvořit z obrázku"):
-            result=ai_generate(Image.open(img))
-
-            st.session_state.recipes.insert(0,{
-                "title":titlei or "Bez názvu",
-                "text":result,
-                "fav":False
-            })
-            save_db()
-            st.rerun()
-
-# ---------- LIST ----------
+# ---------- DISPLAY RECIPES ----------
 for i,r in enumerate(st.session_state.recipes):
-
-    fulltext=(r["title"]+" "+r["text"]).lower()
-
+    title = r.get("title","Bez názvu")
+    text = r.get("text","")
+    fulltext=(title+" "+text).lower()
+    
     if search and search.lower() not in fulltext:
         continue
-
-    with st.expander("⭐ "+r["title"] if r["fav"] else r["title"]):
-
-        nt=st.text_input("Název",r["title"],key=f"t{i}")
-        tx=st.text_area("Text",r["text"],key=f"x{i}",height=250)
-
-        c1,c2,c3=st.columns(3)
-
-        with c1:
-            if st.button("💾",key=f"s{i}"):
-                st.session_state.recipes[i]["title"]=nt
-                st.session_state.recipes[i]["text"]=tx
+    
+    with st.expander("⭐ "+title if r.get("fav",False) else title):
+        nt = st.text_input("Název", title, key=f"t{i}")
+        tx = st.text_area("Text", text, key=f"x{i}", height=250)
+        t_col, c_col, d_col, fav_col = st.columns([1,1,1,1])
+        with t_col:
+            if st.button("💾", key=f"s{i}"):
+                st.session_state.recipes[i]["title"] = nt
+                st.session_state.recipes[i]["text"] = tx
                 save_db()
                 st.rerun()
-
-        with c2:
-            if st.button("⭐",key=f"f{i}"):
-                st.session_state.recipes[i]["fav"]=not r["fav"]
+        with fav_col:
+            if st.button("⭐", key=f"f{i}"):
+                st.session_state.recipes[i]["fav"] = not r.get("fav",False)
                 save_db()
                 st.rerun()
-
-        with c3:
-            if st.button("🗑",key=f"d{i}"):
+        with d_col:
+            if st.button("🗑", key=f"d{i}"):
                 st.session_state.recipes.pop(i)
                 save_db()
                 st.rerun()
