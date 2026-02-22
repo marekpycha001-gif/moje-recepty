@@ -1,105 +1,81 @@
 import streamlit as st
-import json, os
-from datetime import datetime, timedelta
+import requests, json, os
 
 st.set_page_config("Moje recepty", layout="centered")
 
-DATA_FILE="recepty.json"
-SYNC_FILE="sync.txt"
+API_URL="https://sheetdb.io/api/v1/5ygnspqc90f9d"
+LOCAL="recepty.json"
 
-# ================= UI STYLE =================
+# ================= STYLE =================
 st.markdown("""
 <style>
 .block-container{padding-top:1rem}
 .card{
-    background:#ffffff;
-    padding:15px;
-    border-radius:18px;
-    box-shadow:0 3px 12px rgba(0,0,0,0.08);
-    margin-bottom:15px;
+background:white;
+padding:15px;
+border-radius:18px;
+box-shadow:0 3px 12px rgba(0,0,0,0.1);
+margin-bottom:15px;
 }
-.title{
-    font-size:22px;
-    font-weight:700;
-}
-.ing{color:#444;font-size:15px}
-.step{color:#222;font-size:15px}
-.topbtn button{
-    width:100%;
-    border-radius:12px;
-    height:45px;
-    font-size:18px;
-}
+.title{font-size:22px;font-weight:700}
 </style>
 """,unsafe_allow_html=True)
 
 # ================= DATA =================
-def load():
-    if os.path.exists(DATA_FILE):
-        return json.load(open(DATA_FILE,"r",encoding="utf8"))
+def load_local():
+    if os.path.exists(LOCAL):
+        return json.load(open(LOCAL,"r",encoding="utf8"))
     return []
 
-def save(data):
-    json.dump(data,open(DATA_FILE,"w",encoding="utf8"),ensure_ascii=False,indent=2)
+def save_local(data):
+    json.dump(data,open(LOCAL,"w",encoding="utf8"),ensure_ascii=False,indent=2)
 
-if "recipes" not in st.session_state:
-    st.session_state.recipes=load()
-
-# ================= GOOGLE SHEET =================
-def connect_sheet():
+def load_online():
     try:
-        import gspread
-        from google.oauth2.service_account import Credentials
-
-        creds=Credentials.from_service_account_info(
-            dict(st.secrets["gcp_service_account"]),
-            scopes=["https://www.googleapis.com/auth/spreadsheets"]
-        )
-        return gspread.authorize(creds).open(st.secrets["gsheet_name"]).sheet1
+        r=requests.get(API_URL,timeout=5)
+        if r.status_code==200:
+            data=[]
+            for x in r.json():
+                data.append({
+                    "name":x.get("name",""),
+                    "type":x.get("type","slané"),
+                    "ingredients":x.get("ingredients",""),
+                    "steps":x.get("steps","")
+                })
+            return data
     except:
-        return None
+        pass
+    return load_local()
 
-def sync():
-    sheet=connect_sheet()
-    if not sheet:
-        st.warning("⚠️ Google Sheet nepřipojen")
-        return
+def save_online(data):
+    try:
+        requests.delete(API_URL+"/all")
+        requests.post(API_URL,json=data)
+    except:
+        pass
+    save_local(data)
 
-    sheet.clear()
-    sheet.append_row(["Název","Typ","Ingredience","Postup"])
-
-    for r in st.session_state.recipes:
-        sheet.append_row([r["name"],r["type"],r["ingredients"],r["steps"]])
-
-    open(SYNC_FILE,"w").write(datetime.now().isoformat())
-    st.success("✔ Synchronizováno")
-
-def autosync():
-    if not os.path.exists(SYNC_FILE):
-        return
-    last=datetime.fromisoformat(open(SYNC_FILE).read())
-    if datetime.now()-last>timedelta(days=7):
-        sync()
-
-autosync()
+# ================= STATE =================
+if "recipes" not in st.session_state:
+    st.session_state.recipes=load_online()
 
 # ================= HEADER =================
-c1,c2,c3=st.columns([1,1,5])
+c1,c2,c3=st.columns([1,1,4])
 
 with c1:
     if st.button("➕",use_container_width=True):
         st.session_state.add=True
 
 with c2:
-    if st.button("☁",use_container_width=True):
-        sync()
+    if st.button("🔄",use_container_width=True):
+        save_online(st.session_state.recipes)
 
-search=c3.text_input("🔎 Hledat recept")
+search=c3.text_input("🔎 hledat")
 
 # ================= ADD =================
 if st.session_state.get("add"):
 
-    st.markdown("## Nový recept")
+    st.subheader("Nový recept")
 
     name=st.text_input("Název")
     typ=st.radio("Typ",["sladké","slané"],horizontal=True)
@@ -107,36 +83,36 @@ if st.session_state.get("add"):
     steps=st.text_area("Postup")
 
     if st.button("Uložit",use_container_width=True):
-        st.session_state.recipes.append({
+        st.session_state.recipes.insert(0,{
             "name":name,
             "type":typ,
             "ingredients":ing,
             "steps":steps
         })
-        save(st.session_state.recipes)
+        save_online(st.session_state.recipes)
         st.session_state.add=False
         st.rerun()
 
 # ================= FILTER =================
 f1,f2=st.columns(2)
-sweet=f1.toggle("🍰 sladké",True)
-salty=f2.toggle("🥩 slané",True)
+show_sweet=f1.toggle("🍰 sladké",True)
+show_salty=f2.toggle("🥩 slané",True)
 
 # ================= LIST =================
 for i,r in enumerate(st.session_state.recipes):
 
     if search and search.lower() not in r["name"].lower():
         continue
-    if r["type"]=="sladké" and not sweet:
+    if r["type"]=="sladké" and not show_sweet:
         continue
-    if r["type"]=="slané" and not salty:
+    if r["type"]=="slané" and not show_salty:
         continue
 
     st.markdown(f"""
     <div class="card">
-        <div class="title">{'🍰' if r["type"]=="sladké" else '🥩'} {r["name"]}</div>
-        <div class="ing"><b>Ingredience:</b><br>{r["ingredients"].replace(chr(10),"<br>")}</div>
-        <div class="step"><b>Postup:</b><br>{r["steps"].replace(chr(10),"<br>")}</div>
+    <div class="title">{'🍰' if r["type"]=="sladké" else '🥩'} {r["name"]}</div>
+    <b>Ingredience:</b><br>{r["ingredients"].replace(chr(10),"<br>")}<br><br>
+    <b>Postup:</b><br>{r["steps"].replace(chr(10),"<br>")}
     </div>
     """,unsafe_allow_html=True)
 
@@ -148,7 +124,7 @@ for i,r in enumerate(st.session_state.recipes):
 
     if b2.button("🗑 Smazat",key="d"+str(i),use_container_width=True):
         st.session_state.recipes.pop(i)
-        save(st.session_state.recipes)
+        save_online(st.session_state.recipes)
         st.rerun()
 
 # ================= EDIT =================
@@ -157,7 +133,7 @@ if "edit" in st.session_state:
     i=st.session_state.edit
     r=st.session_state.recipes[i]
 
-    st.markdown("## Upravit recept")
+    st.subheader("Upravit recept")
 
     name=st.text_input("Název",r["name"])
     typ=st.radio("Typ",["sladké","slané"],index=0 if r["type"]=="sladké" else 1,horizontal=True)
@@ -171,6 +147,6 @@ if "edit" in st.session_state:
             "ingredients":ing,
             "steps":steps
         }
-        save(st.session_state.recipes)
+        save_online(st.session_state.recipes)
         del st.session_state.edit
         st.rerun()
