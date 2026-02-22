@@ -9,24 +9,16 @@ SDB_URL="https://sheetdb.io/api/v1/5ygnspqc90f9d"
 LOCAL_FILE="recipes.json"
 
 # ---------------- SESSION ----------------
-defaults={
-    "api":"",
-    "recipes":[],
-    "show_new":False,
-    "show_search":False,
-    "show_api":False
-}
+defaults={"api":"","recipes":[],"show_new":False,"show_search":False,"show_api":False}
 for k,v in defaults.items():
     if k not in st.session_state:
         st.session_state[k]=v
 
 # ---------------- AI ----------------
 def ai_generate(content):
-
     try:
         genai.configure(api_key=st.session_state.api)
 
-        # vždy vezme aktuální dostupný model
         model_name=None
         for m in genai.list_models():
             if "generateContent" in m.supported_generation_methods:
@@ -45,7 +37,6 @@ NAZEV:
 INGREDIENCE:
 POSTUP:
 """
-
         r=model.generate_content([prompt,content])
         return r.text
 
@@ -62,11 +53,17 @@ def save_local(data):
     with open(LOCAL_FILE,"w",encoding="utf8") as f:
         json.dump(data,f,ensure_ascii=False,indent=2)
 
+def normalize(rec):
+    # opraví staré i nové názvy
+    if "nazev" not in rec:
+        rec["nazev"]=rec.get("title","Bez názvu")
+    return rec
+
 def load_db():
     try:
         r=requests.get(SDB_URL,timeout=5)
         if r.status_code==200:
-            return r.json()
+            return [normalize(x) for x in r.json()]
     except:
         pass
     return load_local()
@@ -85,32 +82,51 @@ if not st.session_state.recipes:
 # ---------------- DESIGN ----------------
 st.markdown("""
 <style>
+body,[data-testid="stAppViewContainer"]{
+ background:radial-gradient(circle at bottom,#000428,#004e92);
+ color:white;
+}
+
+.title{
+ text-align:center;
+ font-size:24px;
+ font-weight:bold;
+ margin-bottom:10px;
+ color:#00ccff;
+}
+
 .topbar{
  display:flex;
  justify-content:center;
  gap:6px;
  margin-bottom:10px;
 }
-.topbtn{
- width:42px;
+
+.stButton button{
  height:42px;
- font-size:20px;
+ width:42px;
  border-radius:10px;
- border:none;
+ font-size:20px;
  background:#0099ff;
  color:white;
 }
-.title{
- text-align:center;
- font-size:22px;
- font-weight:bold;
- margin-bottom:10px;
+
+.stExpanderHeader{
+ background:#1E3A8A !important;
+ color:white !important;
+ border-radius:10px;
+}
+
+.stExpanderContent{
+ background:#cce0ff !important;
+ color:black;
+ border-radius:10px;
 }
 </style>
 """,unsafe_allow_html=True)
 
 # ---------------- TOP BAR ----------------
-c1,c2,c3,c4=st.columns([1,1,1,1])
+c1,c2,c3,c4=st.columns(4)
 with c1:
     if st.button("➕"):
         st.session_state.show_new=not st.session_state.show_new
@@ -124,7 +140,6 @@ with c4:
     if st.button("🔑"):
         st.session_state.show_api=not st.session_state.show_api
 
-# ---------------- TITLE ----------------
 st.markdown('<div class="title">Márova kuchařka</div>',unsafe_allow_html=True)
 
 # ---------------- API ----------------
@@ -136,12 +151,12 @@ search=""
 if st.session_state.show_search:
     search=st.text_input("Hledat")
 
-# ---------------- ADD RECIPE ----------------
+# ---------------- ADD ----------------
 if st.session_state.show_new:
 
     tab1,tab2,tab3=st.tabs(["Ručně","URL","Obrázek"])
 
-    # RUČNĚ
+    # ručně
     with tab1:
         with st.form("manual"):
             t=st.text_input("Název")
@@ -158,30 +173,39 @@ if st.session_state.show_new:
     # URL
     with tab2:
         url=st.text_input("URL receptu")
+        title_web=st.text_input("Název receptu (volitelné)")
         if st.button("Načíst z webu"):
             if url:
+
                 if not url.startswith("http"):
                     url="https://"+url
+
                 try:
-                    page=requests.get(url,timeout=10,headers={"User-Agent":"Mozilla"}).text
+                    headers={"User-Agent":"Mozilla/5.0"}
+                    page=requests.get(url,headers=headers,timeout=15).text
                     text=ai_generate(page)
+
                     st.session_state.recipes.insert(0,{
-                        "nazev":"Recept z webu",
+                        "nazev":title_web or "Recept z webu",
                         "text":text,
                         "fav":False
                     })
                     save_db()
                     st.rerun()
-                except:
-                    st.error("Stránku se nepodařilo načíst")
 
-    # OBRÁZEK
+                except Exception as e:
+                    st.error(f"Načtení selhalo: {e}")
+
+    # obrázek
     with tab3:
         img=st.file_uploader("Nahraj obrázek",type=["png","jpg","jpeg"])
+        title_img=st.text_input("Název receptu z obrázku")
+
         if img and st.button("Načíst z obrázku"):
             text=ai_generate(Image.open(img))
+
             st.session_state.recipes.insert(0,{
-                "nazev":"Recept z obrázku",
+                "nazev":title_img or "Recept z obrázku",
                 "text":text,
                 "fav":False
             })
