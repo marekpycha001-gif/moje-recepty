@@ -5,7 +5,6 @@ import requests, json, os
 
 st.set_page_config(page_title="Márova kuchařka", page_icon="🍳", layout="centered")
 
-# ========= KONFIG =========
 SDB_URL="https://sheetdb.io/api/v1/5ygnspqc90f9d"
 LOCAL_FILE="recipes.json"
 
@@ -22,26 +21,25 @@ for k,v in defaults.items():
         st.session_state[k]=v
 
 # ========= AI =========
-def ai(txt):
+def ai_process(content):
     if not st.session_state.api:
-        return txt
+        return content
     try:
         genai.configure(api_key=st.session_state.api)
-
         model=genai.GenerativeModel("gemini-1.5-flash")
 
-        prompt=f"""
+        prompt="""
 Uprav tento recept do přehledné struktury.
 Jazyk: čeština
 Formát:
+
 NÁZEV:
 INGREDIENCE:
 POSTUP:
-
-Text:
-{txt}
 """
-        return model.generate_content(prompt).text
+
+        res=model.generate_content([prompt,content])
+        return res.text
 
     except Exception as e:
         return f"AI chyba: {e}"
@@ -95,25 +93,6 @@ body,[data-testid="stAppViewContainer"]{
  color:white;
 }
 
-/* IKONY */
-.topbar{
- display:flex;
- justify-content:center;
- gap:6px;
- margin-bottom:10px;
-}
-
-.topbtn{
- background:#0099ff;
- color:white;
- border:none;
- padding:6px 10px;
- border-radius:10px;
- font-size:18px;
- cursor:pointer;
-}
-
-/* NADPIS */
 .title{
  font-family:'Dancing Script',cursive;
  font-size:20px;
@@ -122,7 +101,6 @@ body,[data-testid="stAppViewContainer"]{
  margin-bottom:15px;
 }
 
-/* KARTA */
 .stExpanderHeader{
  background:#1E3A8A !important;
  color:white !important;
@@ -137,7 +115,7 @@ body,[data-testid="stAppViewContainer"]{
 """,unsafe_allow_html=True)
 
 # ========= IKONY =========
-c1,c2,c3,c4=st.columns([1,1,1,1])
+c1,c2,c3,c4=st.columns(4)
 
 with c1:
     if st.button("➕"):
@@ -155,7 +133,6 @@ with c4:
     if st.button("🔑"):
         st.session_state.show_api=not st.session_state.show_api
 
-
 # ========= TITLE =========
 st.markdown('<div class="title">Márova kuchařka</div>',unsafe_allow_html=True)
 
@@ -166,14 +143,14 @@ if st.session_state.show_api:
 # ========= SEARCH =========
 search=""
 if st.session_state.show_search:
-    search=st.text_input("Hledat podle názvu nebo textu")
+    search=st.text_input("Hledat recept")
 
-# ========= NOVÝ RECEPT =========
+# ========= NOVÝ =========
 if st.session_state.show_new:
 
-    tab1,tab2=st.tabs(["Ručně","AI"])
+    tab1,tab2,tab3=st.tabs(["Ručně","AI text / odkaz","Obrázek"])
 
-    # RUČNÍ
+    # RUČNĚ
     with tab1:
         with st.form("manual"):
             title=st.text_input("Název")
@@ -188,20 +165,35 @@ if st.session_state.show_new:
                     save_db()
                     st.rerun()
 
-    # AI
+    # AI TEXT
     with tab2:
         with st.form("ai"):
-            title=st.text_input("Název (volitelné)")
-            text=st.text_area("Text pro AI")
-            if st.form_submit_button("Vygenerovat"):
+            title=st.text_input("Název")
+            text=st.text_area("Vlož text nebo odkaz")
+            if st.form_submit_button("Generovat"):
                 if text:
                     st.session_state.recipes.insert(0,{
                         "title":title or "Bez názvu",
-                        "text":ai(text),
+                        "text":ai_process(text),
                         "fav":False
                     })
                     save_db()
                     st.rerun()
+
+    # OBRÁZEK
+    with tab3:
+        img=st.file_uploader("Nahraj obrázek receptu",type=["jpg","png","jpeg"])
+        title2=st.text_input("Název obrázku")
+
+        if img and st.button("Načíst recept z obrázku"):
+            text=ai_process(Image.open(img))
+            st.session_state.recipes.insert(0,{
+                "title":title2 or "Bez názvu",
+                "text":text,
+                "fav":False
+            })
+            save_db()
+            st.rerun()
 
 # ========= SEZNAM =========
 for i,r in enumerate(st.session_state.recipes):
