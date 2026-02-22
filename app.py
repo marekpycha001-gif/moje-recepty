@@ -1,7 +1,7 @@
 import streamlit as st
 import google.generativeai as genai
 from PIL import Image
-import requests, json, os, re
+import requests, json, os
 
 st.set_page_config(page_title="Márova kuchařka", page_icon="🍳", layout="centered")
 
@@ -60,7 +60,6 @@ def load_db():
         pass
     if not recipes:
         recipes=load_local()
-    # zajistí defaulty
     for r in recipes:
         if not r.get("title"): r["title"]="Bez názvu"
         if not r.get("text"): r["text"]=""
@@ -72,7 +71,6 @@ def load_db():
 
 def save_db():
     try:
-        # vymazat a poslat vše nové
         requests.delete(SDB_URL+"/all",timeout=3)
         requests.post(SDB_URL,json=[{
             "text":r["text"],
@@ -92,71 +90,26 @@ if not st.session_state.recipes:
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&display=swap');
-
-body,[data-testid="stAppViewContainer"]{
- background:radial-gradient(circle at bottom,#000428,#004e92);
- color:white;
-}
-
-.topbar{
- display:flex;
- justify-content:center;
- gap:4px;
- margin-bottom:5px;
- flex-wrap:nowrap;
-}
-
-.topbtn{
- background:#0099ff;
- color:white;
- border:none;
- padding:5px 8px;
- border-radius:6px;
- font-size:18px;
- cursor:pointer;
-}
-
-.title{
- font-family:'Dancing Script',cursive;
- font-size:20px;
- text-align:center;
- color:#00ccff;
- margin-bottom:10px;
-}
-
-.stExpanderHeader{
- background:#1E3A8A !important;
- color:white !important;
- border-radius:10px;
-}
-
-.stExpanderContent{
- background:#cce0ff !important;
- color:black;
- border-radius:10px;
-}
-
-.stTextInput>div>div>input, .stNumberInput>div>div>input, textarea{
- color:black;
-}
+body,[data-testid="stAppViewContainer"]{background:radial-gradient(circle at bottom,#000428,#004e92); color:white;}
+.topbar{display:flex; justify-content:center; gap:4px; margin-bottom:5px; flex-wrap:nowrap;}
+.topbtn{background:#0099ff; color:white; border:none; padding:5px 8px; border-radius:6px; font-size:18px; cursor:pointer;}
+.title{font-family:'Dancing Script',cursive; font-size:20px; text-align:center; color:#00ccff; margin-bottom:10px;}
+.stExpanderHeader{background:#1E3A8A !important; color:white !important; border-radius:10px;}
+.stExpanderContent{background:#cce0ff !important; color:black; border-radius:10px;}
+.stTextInput>div>div>input, .stNumberInput>div>div>input, textarea{color:black;}
 </style>
 """,unsafe_allow_html=True)
 
 # ---------- TOP ICON BAR ----------
-st.markdown(f"""
-<div class="topbar">
-<button class="topbtn" onclick="document.querySelector('#new').click()">➕</button>
-<button class="topbtn" onclick="document.querySelector('#sync').click()">🔄</button>
-<button class="topbtn" onclick="document.querySelector('#search').click()">🔍</button>
-<button class="topbtn" onclick="document.querySelector('#api').click()">🔑</button>
-</div>
-""",unsafe_allow_html=True)
-
-# ---------- BUTTONS ----------
-if st.button("new", key="new"): st.session_state.show_new = not st.session_state.show_new
-if st.button("sync", key="sync"): save_db()
-if st.button("search", key="search"): st.session_state.show_search = not st.session_state.show_search
-if st.button("api", key="api"): st.session_state.show_api = not st.session_state.show_api
+col1, col2, col3, col4 = st.columns(4)
+with col1:
+    if st.button("➕"): st.session_state.show_new = not st.session_state.show_new
+with col2:
+    if st.button("🔄"): save_db()
+with col3:
+    if st.button("🔍"): st.session_state.show_search = not st.session_state.show_search
+with col4:
+    if st.button("🔑"): st.session_state.show_api = not st.session_state.show_api
 
 # ---------- TITLE ----------
 st.markdown('<div class="title">Márova kuchařka</div>',unsafe_allow_html=True)
@@ -172,9 +125,9 @@ if st.session_state.show_search:
 
 # ---------- NEW RECIPE ----------
 if st.session_state.show_new:
-    t1,t2,t3=st.tabs(["Text","Web","Foto"])
+    t1,t2,t3 = st.tabs(["Text","Web","Foto"])
     
-    with t1:  # ručně zadat
+    with t1:
         with st.form("form_text"):
             txt = st.text_area("Text receptu")
             title = st.text_input("Název receptu")
@@ -191,34 +144,33 @@ if st.session_state.show_new:
                         "calories":cal
                     })
                     save_db()
-                    st.rerun()
+                    st.experimental_rerun()
                     
-    with t2:  # generace z webu
+    with t2:
         with st.form("form_web"):
             url = st.text_input("URL receptu")
             title2 = st.text_input("Název receptu")
             if st.form_submit_button("Vygenerovat z webu"):
-                if url:
+                if url and url.startswith("http"):
                     try:
-                        if not url.startswith("http"):
-                            st.warning("Zadej platnou URL")
-                        else:
-                            page=requests.get(url,timeout=5).text
-                            gen_txt = ai_generate(page)
-                            st.session_state.recipes.insert(0,{
-                                "title": title2 or "Bez názvu",
-                                "text": gen_txt,
-                                "fav":False,
-                                "img":"",
-                                "time":"",
-                                "calories":""
-                            })
-                            save_db()
-                            st.rerun()
+                        page = requests.get(url,timeout=5).text
+                        gen_txt = ai_generate(page)
+                        st.session_state.recipes.insert(0,{
+                            "title": title2 or "Bez názvu",
+                            "text": gen_txt,
+                            "fav":False,
+                            "img":"",
+                            "time":"",
+                            "calories":""
+                        })
+                        save_db()
+                        st.experimental_rerun()
                     except:
                         st.warning("Stránku se nepodařilo načíst")
+                else:
+                    st.warning("Zadej platnou URL")
                     
-    with t3:  # generace z obrázku
+    with t3:
         img = st.file_uploader("Foto", type=["jpg","png"])
         title3 = st.text_input("Název receptu (foto)")
         if img and st.button("Vygenerovat z obrázku"):
@@ -233,7 +185,7 @@ if st.session_state.show_new:
                     "calories":""
                 })
                 save_db()
-                st.rerun()
+                st.experimental_rerun()
             except Exception as e:
                 st.warning(f"Chyba: {e}")
 
@@ -241,7 +193,7 @@ if st.session_state.show_new:
 for i,r in enumerate(st.session_state.recipes):
     title = r.get("title","Bez názvu")
     text = r.get("text","")
-    fulltext=(title+" "+text).lower()
+    fulltext = (title+" "+text).lower()
     
     if search and search.lower() not in fulltext:
         continue
@@ -255,14 +207,14 @@ for i,r in enumerate(st.session_state.recipes):
                 st.session_state.recipes[i]["title"] = nt
                 st.session_state.recipes[i]["text"] = tx
                 save_db()
-                st.rerun()
+                st.experimental_rerun()
         with fav_col:
             if st.button("⭐", key=f"f{i}"):
                 st.session_state.recipes[i]["fav"] = not r.get("fav",False)
                 save_db()
-                st.rerun()
+                st.experimental_rerun()
         with d_col:
             if st.button("🗑", key=f"d{i}"):
                 st.session_state.recipes.pop(i)
                 save_db()
-                st.rerun()
+                st.experimental_rerun()
