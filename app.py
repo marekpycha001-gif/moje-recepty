@@ -1,207 +1,237 @@
 import streamlit as st
-import json, os, re, requests
+import json
+import os
+import pandas as pd
+from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Márova kuchařka PRO", page_icon="🍳", layout="centered")
+# ======================
+# KONFIG
+# ======================
+DATA_FILE = "recepty.json"
+SYNC_FILE = "last_sync.txt"
 
-FILE="recipes.json"
+st.set_page_config(page_title="Moje recepty", layout="centered")
 
-# ---------- SESSION ----------
-defaults={
-    "recipes":[],
-    "show_add":False,
-    "show_search":False,
-    "api":"",
-    "filter":"all"
-}
-for k,v in defaults.items():
-    if k not in st.session_state:
-        st.session_state[k]=v
-
-# ---------- LOAD / SAVE ----------
-def load():
-    if os.path.exists(FILE):
-        data=json.load(open(FILE,encoding="utf8"))
-        # oprava starých receptů bez typu
-        for r in data:
-            if "type" not in r:
-                r["type"]="slané"
-        return data
-    return []
-
-def save():
-    with open(FILE,"w",encoding="utf8") as f:
-        json.dump(st.session_state.recipes,f,ensure_ascii=False,indent=2)
-
-if not st.session_state.recipes:
-    st.session_state.recipes=load()
-
-# ---------- CONVERTER ----------
-density={
-    "olej":0.92,
-    "mléko":1.03,
-    "voda":1,
-    "cukr":0.85,
-    "mouka":0.53,
-    "med":1.42,
-    "máslo":0.96
-}
-
-units={
-    "ml":1,
-    "l":1000,
-    "lžíce":15,
-    "lžička":5,
-    "cup":240,
-    "hrnek":240
-}
-
-def convert_line(line):
-    text=line.lower()
-    m=re.search(r"(\d+\.?\d*)\s*(ml|l|lžíce|lžička|cup|hrnek)",text)
-    if not m:
-        return line
-
-    val=float(m.group(1))
-    unit=m.group(2)
-    ml=val*units.get(unit,1)
-
-    for name,d in density.items():
-        if name in text:
-            g=round(ml*d)
-            return f"{line} → {g} g"
-
-    return f"{line} → {round(ml)} g (odhad)"
-
-# ---------- AI optional ----------
-def ai_convert(text):
-    if not st.session_state.api:
-        return None
+# ======================
+# GOOGLE SHEETS NASTAVENÍ
+# ======================
+def connect_gsheet():
     try:
-        url="https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key="+st.session_state.api
-        payload={"contents":[{"parts":[{"text":f"Převeď ingredience do gramů a přelož do češtiny:\n{text}"}]}]}
-        r=requests.post(url,json=payload,timeout=30)
-        return r.json()["candidates"][0]["content"]["parts"][0]["text"]
+        import gspread
+        from google.oauth2.service_account import Credentials
+
+        creds_dict = dict(st.secrets["gcp_service_account"])
+        creds = Credentials.from_service_account_info(
+            creds_dict,
+            scopes=["https://www.googleapis.com/auth/spreadsheets"]
+        )
+        client = gspread.authorize(creds)
+        sheet = client.open(st.secrets["gsheet_name"]).sheet1
+        return sheet
     except:
         return None
 
-# ---------- STYLE ----------
-st.markdown("""
-<style>
-body,[data-testid="stAppViewContainer"]{
-background:linear-gradient(180deg,#000428,#004e92);
-color:white}
-.title{
-font-size:26px;
-text-align:center;
-color:#00ccff;
-margin-bottom:12px}
-.stExpanderHeader{
-background:#1E3A8A!important;
-color:white!important;
-border-radius:12px}
-.stExpanderContent{
-background:#e6f0ff!important;
-color:black!important;
-border-radius:12px}
-button{
-border-radius:12px!important}
-</style>
-""",unsafe_allow_html=True)
 
-# ---------- TOP BAR ----------
-c1,c2,c3=st.columns(3)
+# ======================
+# ULOŽENÍ / NAČTENÍ
+# ======================
+def load_data():
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return []
+
+def save_data(data):
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+# ======================
+# SYNCHRONIZACE
+# ======================
+def sync_to_gsheet(data):
+    sheet = connect_gsheet()
+    if sheet is None:
+        st.warning("⚠️ Nepodařilo se připojit k Google Sheet.")
+        return
+
+    sheet.clear()
+    sheet.append_row(["Název","Typ","Ingredience","Postup"])
+
+    for r in data:
+        sheet.append_row([
+            r["name"],
+            r["type"],
+            r["ingredients"],
+            r["steps"]
+        ])
+
+    with open(SYNC_FILE,"w") as f:
+        f.write(datetime.now().isoformat())
+
+    st.success("✔ Synchronizováno s Google Sheet")
+
+
+def auto_sync(data):
+    if not os.path.exists(SYNC_FILE):
+        return sync_to_gsheet(data)
+
+    last = datetime.fromisoformat(open(SYNC_FILE).read())
+    if datetime.now() - last > timedelta(days=7):
+        sync_to_gsheet(data)
+
+
+# ======================
+# PŘEVODY JEDNOTEK
+# ======================
+densities = {
+    "olej":0.92,
+    "mléko":1.03,
+    "voda":1.0
+}
+
+spoon_weights = {
+    "cukr":12,
+    "mouka":10,
+    "olej":13,
+    "med":21
+}
+
+def convert_units(text):
+    words = text.lower().split()
+    out = []
+
+    for i,w in enumerate(words):
+        if w == "ml" and i>0:
+            try:
+                val=float(words[i-1])
+                for k,d in densities.items():
+                    if k in text:
+                        out.append(f"{val*d:.1f} g")
+                        break
+            except: pass
+
+        if w.startswith("lžíce"):
+            for k,v in spoon_weights.items():
+                if k in text:
+                    out.append(f"{v} g {k}")
+
+    if out:
+        return text + "\n\n➡ Přepočet:\n" + "\n".join(out)
+    return text
+
+
+# ======================
+# DATA
+# ======================
+if "recipes" not in st.session_state:
+    st.session_state.recipes = load_data()
+
+auto_sync(st.session_state.recipes)
+
+
+# ======================
+# HEADER
+# ======================
+c1,c2,c3 = st.columns([1,1,6])
 
 with c1:
-    if st.button("➕ Přidat"):
-        st.session_state.show_add=not st.session_state.show_add
+    if st.button("➕"):
+        st.session_state.add=True
 
 with c2:
-    if st.button("🔑 AI"):
-        st.session_state.api=st.text_input("API klíč",type="password")
+    if st.button("🔄"):
+        sync_to_gsheet(st.session_state.recipes)
 
-with c3:
-    if st.button("🔍 Hledat"):
-        st.session_state.show_search=not st.session_state.show_search
+search = c3.text_input("🔍 Hledat recept")
 
-st.markdown('<div class="title">Márova kuchařka PRO</div>',unsafe_allow_html=True)
 
-# ---------- FILTER ----------
-f1,f2,f3=st.columns(3)
+# ======================
+# PŘIDÁNÍ RECEPTU
+# ======================
+if st.session_state.get("add"):
 
-with f1:
-    if st.button("🍰 Sladké",use_container_width=True):
-        st.session_state.filter="sladké"
+    st.subheader("Nový recept")
 
-with f2:
-    if st.button("🥩 Slané",use_container_width=True):
-        st.session_state.filter="slané"
+    name = st.text_input("Název")
+    typ = st.radio("Typ",["sladké","slané"])
+    ing = st.text_area("Ingredience")
+    steps = st.text_area("Postup")
 
-with f3:
-    if st.button("📖 Vše",use_container_width=True):
-        st.session_state.filter="all"
+    if st.button("Uložit"):
+        st.session_state.recipes.append({
+            "name":name,
+            "type":typ,
+            "ingredients":convert_units(ing),
+            "steps":steps
+        })
+        save_data(st.session_state.recipes)
+        st.session_state.add=False
+        st.rerun()
 
-# ---------- SEARCH ----------
-search=""
-if st.session_state.show_search:
-    search=st.text_input("Vyhledat recept")
 
-# ---------- ADD ----------
-if st.session_state.show_add:
-    with st.form("add"):
-        name=st.text_input("Název receptu")
-        ing=st.text_area("Ingredience (řádek = položka)")
-        steps=st.text_area("Postup")
-        typ=st.selectbox("Kategorie",["sladké","slané"])
+# ======================
+# FILTRY
+# ======================
+f1,f2 = st.columns(2)
+show_sweet = f1.toggle("🍰 sladké",True)
+show_salty = f2.toggle("🥩 slané",True)
 
-        if st.form_submit_button("Uložit recept"):
-            st.session_state.recipes.insert(0,{
-                "name":name or "Bez názvu",
-                "ing":ing,
-                "steps":steps,
-                "type":typ
-            })
-            save()
-            st.success("Recept uložen")
 
-# ---------- DISPLAY ----------
+# ======================
+# VÝPIS
+# ======================
 for i,r in enumerate(st.session_state.recipes):
 
-    typ=r.get("type","slané")
-    name=r.get("name","Bez názvu")
-    ing=r.get("ing","")
-    steps=r.get("steps","")
-
-    if st.session_state.filter!="all" and typ!=st.session_state.filter:
+    if search and search.lower() not in r["name"].lower():
         continue
 
-    if search and search.lower() not in (name+ing+steps).lower():
+    if r["type"]=="sladké" and not show_sweet:
+        continue
+    if r["type"]=="slané" and not show_salty:
         continue
 
-    icon="🍰" if typ=="sladké" else "🥩"
+    with st.expander(("🍰 " if r["type"]=="sladké" else "🥩 ") + r["name"]):
 
-    with st.expander(f"{icon} {name}"):
+        st.markdown("**Ingredience**")
+        st.write(r["ingredients"])
 
-        n=st.text_input("Název",name,key=f"n{i}")
-        ing2=st.text_area("Ingredience",ing,key=f"i{i}")
-        steps2=st.text_area("Postup",steps,key=f"s{i}")
+        st.markdown("**Postup**")
+        st.write(r["steps"])
 
-        if st.button("⚖ Převést jednotky",key=f"c{i}"):
-            lines=[convert_line(x) for x in ing2.splitlines()]
-            ai=ai_convert(ing2)
-            st.text_area("Výsledek",ai if ai else "\n".join(lines))
+        c1,c2 = st.columns(2)
 
-        b1,b2=st.columns(2)
+        if c1.button("✏️ Upravit",key=f"edit{i}"):
+            st.session_state.edit=i
+            st.rerun()
 
-        with b1:
-            if st.button("💾 Uložit",key=f"save{i}"):
-                st.session_state.recipes[i]["name"]=n
-                st.session_state.recipes[i]["ing"]=ing2
-                st.session_state.recipes[i]["steps"]=steps2
-                save()
-                st.success("Uloženo")
+        if c2.button("🗑 Smazat",key=f"del{i}"):
+            st.session_state.recipes.pop(i)
+            save_data(st.session_state.recipes)
+            st.rerun()
 
-        with b2:
-            if st.button("🗑 Smazat",key=f"del{i}"):
-                st.session_state.recipes.pop(i)
-                save()
-                st.experimental_rerun()
+
+# ======================
+# EDITACE
+# ======================
+if "edit" in st.session_state:
+    i = st.session_state.edit
+    r = st.session_state.recipes[i]
+
+    st.subheader("Upravit recept")
+
+    name = st.text_input("Název",r["name"])
+    typ = st.radio("Typ",["sladké","slané"],index=0 if r["type"]=="sladké" else 1)
+    ing = st.text_area("Ingredience",r["ingredients"])
+    steps = st.text_area("Postup",r["steps"])
+
+    if st.button("Uložit změny"):
+        st.session_state.recipes[i]={
+            "name":name,
+            "type":typ,
+            "ingredients":convert_units(ing),
+            "steps":steps
+        }
+        save_data(st.session_state.recipes)
+        del st.session_state.edit
+        st.rerun()
