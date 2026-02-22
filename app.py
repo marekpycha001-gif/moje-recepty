@@ -30,13 +30,38 @@ for k,v in defaults.items():
 
 # ---------- AI ----------
 def ai_generate(txt):
+    """
+    Generuje text pomocí Google Generative AI.
+    - Dynamicky vybírá dostupný model pro generate_content
+    - Překládá do češtiny a lehce upravuje recept
+    """
+    if not st.session_state.api:
+        return "⚠️ Zadej API klíč"
+    
+    genai.configure(api_key=st.session_state.api)
+    
     try:
-        if not st.session_state.api:
-            return "⚠️ Zadej API klíč"
-        genai.configure(api_key=st.session_state.api)
-        model = genai.GenerativeModel("models/text-bison-001")
+        # Načti seznam dostupných modelů
+        models = genai.list_models()
+        
+        # Hledáme model, který podporuje generate_content
+        available_models = [
+            m["name"] for m in models 
+            if "generateContent" in m.get("supported_methods", [])
+        ]
+        
+        if not available_models:
+            return "⚠️ Žádný dostupný model nepodporuje generate_content"
+        
+        # Použij první dostupný model
+        model_name = available_models[0]
+        model = genai.GenerativeModel(model_name)
+        
+        # Prompt pro AI: recept do češtiny, lehce upravený
         prompt = f"Jsi expert na vaření. Přelož vše do češtiny a uprav recept tak, aby byl originální a zachoval hlavní kroky. {txt}"
+        
         return model.generate_content([prompt]).text
+    
     except Exception as e:
         return f"AI chyba: {e}"
 
