@@ -1,22 +1,28 @@
 import streamlit as st
-import json, os, re, requests
+import json, os, requests, re
+from fractions import Fraction
+
+# Gemini
+try:
+    import google.generativeai as genai
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
 
 st.set_page_config(page_title="Márova kuchařka", page_icon="🍳", layout="centered")
 
-SDB_URL="https://sheetdb.io/api/v1/5ygnspqc90f9d"
-LOCAL_FILE="recipes.json"
+# ---------- CONFIG ----------
+SDB_URL = "https://sheetdb.io/api/v1/5ygnspqc90f9d"
+LOCAL_FILE = "recipes.json"
+CACHE_FILE = "conversion_cache.json"
 
 # ---------- SESSION ----------
-defaults = {
-    "recipes": [],
-    "show_new": False,
-    "show_search": False
-}
+defaults = {"recipes": [], "show_new": False, "show_search": False, "edit_index": None, "api": ""}
 for k, v in defaults.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
-# ---------- STORAGE ----------
+# ---------- LOAD/SAVE ----------
 def load_local():
     if os.path.exists(LOCAL_FILE):
         return json.load(open(LOCAL_FILE, encoding="utf8"))
@@ -25,6 +31,17 @@ def load_local():
 def save_local(d):
     with open(LOCAL_FILE, "w", encoding="utf8") as f:
         json.dump(d, f, ensure_ascii=False, indent=2)
+
+def load_cache():
+    if os.path.exists(CACHE_FILE):
+        return json.load(open(CACHE_FILE, encoding="utf8"))
+    return {}
+
+def save_cache(cache):
+    with open(CACHE_FILE, "w", encoding="utf8") as f:
+        json.dump(cache, f, ensure_ascii=False, indent=2)
+
+conversion_cache = load_cache()
 
 def load_db():
     recipes = []
@@ -60,55 +77,17 @@ def save_db():
     except:
         st.warning("⚠️ Nepodařilo se připojit k Google Sheet.")
     save_local(st.session_state.recipes)
+    save_cache(conversion_cache)
 
 if not st.session_state.recipes:
     st.session_state.recipes = load_db()
-
-# ---------- UNIT CONVERSIONS ----------
-# hustota běžných surovin v g/ml
-density = {
-    "voda":1, "mléko":1.03, "olej":0.92, "máslo":0.91, "cukr":0.85, "cukr krupice":0.85,
-    "mouka":0.55, "mouka hladká":0.55, "mouka hrubá":0.65, "kakao":0.55, "sůl":1.2, "škrob":0.6
-}
-
-volume_units = {
-    "lžíce":15, "lžička":5, "čaj lžička":5, "ml":1, "cl":10, "dl":100, "hrnek":240
-}
-
-def convert_to_grams(line):
-    """
-    Rozpozná množství, jednotku a surovinu. Převádí na gramy podle hustoty.
-    """
-    m = re.match(r'([\d.,/]+)\s*(\w+)?\s*(.*)', line)
-    if not m:
-        return line
-    qty, unit, rest = m.groups()
-    try:
-        if '/' in qty:
-            num = float(sum([float(eval(fraction)) for fraction in qty.split()]))
-        else:
-            num = float(qty.replace(',','.'))
-    except:
-        return line
-    # převod objemových jednotek na ml
-    if unit in volume_units:
-        ml = num * volume_units[unit]
-        # zkus najít surovinu
-        for key in density:
-            if key in rest.lower():
-                grams = ml * density[key]
-                return f"{int(grams)} g {rest}"
-        # pokud nenajde konkrétní surovinu, ml → g (voda)
-        grams = ml
-        return f"{int(grams)} g {rest}"
-    return line
 
 # ---------- DESIGN ----------
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&display=swap');
 body,[data-testid="stAppViewContainer"]{background:radial-gradient(circle at bottom,#000428,#004e92); color:white;}
-.topbar{display:flex; justify-content:center; gap:4px; margin-bottom:10px; flex-wrap:nowrap;}
+.topbar{display:flex; justify-content:center; gap:4px; margin-bottom:10px; flex-wrap:wrap;}
 .topbtn{background:#0099ff; color:white; border:none; padding:5px 10px; border-radius:8px; font-size:18px; cursor:pointer;}
 .title{font-family:'Dancing Script',cursive; font-size:22px; text-align:center; color:#00ccff; margin-bottom:15px;}
 .stExpanderHeader{background:#1E3A8A !important; color:white !important; border-radius:10px;}
@@ -117,24 +96,64 @@ body,[data-testid="stAppViewContainer"]{background:radial-gradient(circle at bot
 </style>
 """,unsafe_allow_html=True)
 
-# ---------- CALLBACKS ----------
-def toggle_show_new(): st.session_state.show_new = not st.session_state.show_new
-def toggle_show_search(): st.session_state.show_search = not st.session_state.show_search
-def sync_all(): save_db(); st.success("Synchronizováno!")
+# ---------- TOP BAR ----------
+col1, col2, col3, col4 = st.columns([1,1,2,1])
+with col1: st.button("➕", on_click=lambda: st.session_state.update({"show_new": not st.session_state.show_new}))
+with col2: st.button("🔍", on_click=lambda: st.session_state.update({"show_search": not st.session_state.show_search}))
+with col3: st.text_input("API klíč Gemini (pouze pro převod jednotek)", type="password", key="api")
+with col4: st.button("☁️ Sync", on_click=save_db)
 
-# ---------- TOP ICON BAR ----------
-col1, col2, col3 = st.columns([1,1,1])
-with col1: st.button("➕", on_click=toggle_show_new)
-with col2: st.button("🔍", on_click=toggle_show_search)
-with col3: st.button("☁️ Sync", on_click=sync_all)
-
-# ---------- TITLE ----------
 st.markdown('<div class="title">Márova kuchařka</div>',unsafe_allow_html=True)
 
 # ---------- SEARCH ----------
 search=""
 if st.session_state.show_search:
     search = st.text_input("Hledat recept podle názvu/ingrediencí")
+
+# ---------- UNIT CONVERSION ----------
+def local_convert(ingredient_line):
+    """Fallback převod jednotek s podporou zlomků"""
+    pattern = r"([\d\s\/.,]+)\s*(ml|l|lžíce|lžička|hrnek|cup)?\s*(.+)"
+    m = re.match(pattern, ingredient_line.strip(), re.IGNORECASE)
+    if not m:
+        return ingredient_line
+    qty, unit, name = m.groups()
+    name_clean = re.sub(r"[^\w\s]", "", name.lower().strip())
+    # převod množství včetně zlomků
+    try:
+        qty = sum(Fraction(x) for x in qty.replace(",", ".").split())
+    except:
+        qty = 0
+    # koeficient
+    coef = conversion_cache.get(name_clean,1)
+    if unit:
+        unit = unit.lower()
+        if unit=="ml": coef = 1
+        elif unit=="l": coef = 1000
+        elif unit in ["lžíce","tablespoon"]: coef = 15
+        elif unit in ["lžička","teaspoon"]: coef = 5
+        elif unit in ["hrnek","cup"]: coef = 120
+    grams = round(float(qty)*coef)
+    conversion_cache[name_clean] = coef
+    return f"{grams} g {name.strip()}"
+
+def convert_text(full_text):
+    lines = full_text.splitlines()
+    converted_lines = [local_convert(l) for l in lines if l.strip()]
+    return "\n".join(converted_lines)
+
+def ai_convert_units(full_text):
+    if st.session_state.api and GEMINI_AVAILABLE:
+        try:
+            genai.configure(api_key=st.session_state.api)
+            prompt = f"Convert all units in this text to grams/ml and fix typos:\n{full_text}"
+            model = genai.GenerativeModel("models/text-bison-001")
+            result = model.generate_content([prompt]).text
+            return result.strip()
+        except:
+            return convert_text(full_text)
+    else:
+        return convert_text(full_text)
 
 # ---------- NEW RECIPE ----------
 if st.session_state.show_new:
@@ -145,12 +164,18 @@ if st.session_state.show_new:
     ingredients=st.text_area("Ingredience (každá na nový řádek)")
     steps=st.text_area("Postup")
     def save_new_recipe():
+        full_text = f"{ingredients}\n{steps}"
+        converted = ai_convert_units(full_text)
+        lines = converted.splitlines()
+        n = len(ingredients.splitlines())
+        ing = "\n".join(lines[:n])
+        stp = "\n".join(lines[n:])
         st.session_state.recipes.insert(0,{
             "name": name or "Bez názvu",
             "type": typ,
             "portions": portions,
-            "ingredients": ingredients,
-            "steps": steps,
+            "ingredients": ing,
+            "steps": stp,
             "fav": False
         })
         save_db()
@@ -158,63 +183,43 @@ if st.session_state.show_new:
 
 # ---------- DISPLAY RECIPES ----------
 for i,r in enumerate(st.session_state.recipes):
-    r.setdefault("portions",4)
-    r.setdefault("fav",False)
     title_prefix = "⭐ " if r.get("fav") else ""
     title = title_prefix + r["name"]
-
     if search and search.lower() not in (r["name"]+r["ingredients"]).lower():
         continue
-
     with st.expander(title):
-        # --- EDIT ---
-        edit_name = st.text_input("Název", r["name"], key=f"name{i}")
-        edit_type = st.radio("Typ", ["sladké","slané"], index=0 if r["type"]=="sladké" else 1, key=f"type{i}")
-        edit_portions = st.number_input("Počet porcí",1,20,r["portions"], key=f"portions{i}")
-        edit_ingredients = st.text_area("Ingredience", r["ingredients"], key=f"ing{i}")
-        edit_steps = st.text_area("Postup", r["steps"], key=f"steps{i}")
-
-        def save_edit(i=i):
-            r["name"] = edit_name
-            r["type"] = edit_type
-            r["portions"] = edit_portions
-            r["ingredients"] = edit_ingredients
-            r["steps"] = edit_steps
-            save_db()
-        st.button("💾 Uložit změny", key=f"save{i}", on_click=save_edit)
-
-        # --- INGREDIENTS WITH CONVERSION ---
-        st.markdown("### Ingredience podle porcí")
-        for line in edit_ingredients.splitlines():
-            # přepočet množství podle porcí
-            m = re.search(r'(\d+)', line)
-            display_line = line
-            if m:
-                num=int(m.group(1))
-                new=int(num*edit_portions/r["portions"])
-                display_line=line.replace(str(num),str(new),1)
-            display_line = convert_to_grams(display_line)
-            st.write("•", display_line)
-
-        st.markdown("**Postup**")
-        st.write(edit_steps)
-
-        # --- ACTIONS ---
+        st.markdown("### Ingredience")
+        for line in r["ingredients"].splitlines(): st.write("•", line)
+        st.markdown("### Postup")
+        for line in r["steps"].splitlines(): st.write(line)
         c1,c2,c3 = st.columns([1,1,1])
-        def toggle_fav(i=i):
-            r["fav"] = not r.get("fav",False)
-            save_db()
-        c1.button("⭐", key=f"fav{i}", on_click=toggle_fav)
+        c1.button("⭐", key=f"fav{i}", on_click=lambda i=i: [st.session_state.recipes[i].update({"fav": not st.session_state.recipes[i]["fav"]}), save_db()])
+        c2.button("🗑", key=f"del{i}", on_click=lambda i=i: [st.session_state.recipes.pop(i), save_db()])
+        c3.button("✏️", key=f"edit{i}", on_click=lambda i=i: st.session_state.update({"edit_index": i}))
 
-        def delete_recipe(i=i):
-            st.session_state.recipes.pop(i)
-            save_db()
-        c2.button("🗑", key=f"del{i}", on_click=delete_recipe)
-
-        def sync_recipe(i=i):
-            try:
-                requests.post(SDB_URL,json=r)
-                st.success("Synchronizováno")
-            except:
-                st.warning("⚠️ Nepodařilo se připojit k Google Sheet")
-        c3.button("☁️", key=f"sync{i}", on_click=sync_recipe)
+# ---------- EDIT ----------
+if st.session_state.edit_index is not None:
+    r = st.session_state.recipes[st.session_state.edit_index]
+    st.markdown(f"### Editace receptu: {r['name']}")
+    edit_name = st.text_input("Název", r["name"])
+    edit_type = st.radio("Typ", ["sladké","slané"], index=0 if r["type"]=="sladké" else 1)
+    edit_portions = st.number_input("Počet porcí",1,20,r["portions"])
+    edit_ingredients = st.text_area("Ingredience", r["ingredients"])
+    edit_steps = st.text_area("Postup", r["steps"])
+    if st.button("💾 Uložit změny"):
+        full_text = f"{edit_ingredients}\n{edit_steps}"
+        converted = ai_convert_units(full_text)
+        lines = converted.splitlines()
+        n = len(edit_ingredients.splitlines())
+        ing = "\n".join(lines[:n])
+        stp = "\n".join(lines[n:])
+        r.update({
+            "name": edit_name,
+            "type": edit_type,
+            "portions": edit_portions,
+            "ingredients": ing,
+            "steps": stp
+        })
+        save_db()
+        st.session_state.edit_index = None
+        st.experimental_rerun()
