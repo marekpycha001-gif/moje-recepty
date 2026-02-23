@@ -77,7 +77,7 @@ body,[data-testid="stAppViewContainer"]{background:radial-gradient(circle at bot
 .stExpanderHeader{background:#1E3A8A !important; color:white !important; border-radius:10px;}
 .stExpanderContent{background:#cce0ff !important; color:black !important; border-radius:10px;}
 .stTextInput input, textarea{color:black;}
-.smallgap p{margin-bottom:0px; line-height:1.1;}
+.smallgap p{margin-bottom:0px; line-height:0,7;}
 </style>
 """,unsafe_allow_html=True)
 
