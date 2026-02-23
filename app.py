@@ -6,18 +6,51 @@ st.set_page_config("Moje recepty", layout="centered")
 API_URL="https://sheetdb.io/api/v1/5ygnspqc90f9d"
 LOCAL="recepty.json"
 
-# ================= STYLE =================
+# ================= DESIGN =================
 st.markdown("""
 <style>
-.block-container{padding-top:1rem}
+.block-container{
+padding-top:4rem;
+padding-bottom:2rem;
+max-width:700px;
+}
+
+/* background */
+[data-testid="stAppViewContainer"]{
+background: radial-gradient(circle at top,#0f2027,#203a43,#2c5364);
+color:white;
+}
+
+/* header buttons */
+.topbar button{
+height:48px;
+font-size:20px;
+border-radius:14px;
+background:#00b4ff;
+color:white;
+border:none;
+}
+
+/* cards */
 .card{
 background:white;
-padding:15px;
+color:black;
+padding:18px;
 border-radius:18px;
-box-shadow:0 3px 12px rgba(0,0,0,0.1);
-margin-bottom:15px;
+box-shadow:0 6px 18px rgba(0,0,0,0.2);
+margin-bottom:18px;
 }
-.title{font-size:22px;font-weight:700}
+
+.title{
+font-size:22px;
+font-weight:700;
+margin-bottom:10px;
+}
+
+/* inputs */
+input,textarea{
+color:black !important;
+}
 </style>
 """,unsafe_allow_html=True)
 
@@ -34,15 +67,7 @@ def load_online():
     try:
         r=requests.get(API_URL,timeout=5)
         if r.status_code==200:
-            data=[]
-            for x in r.json():
-                data.append({
-                    "name":x.get("name",""),
-                    "type":x.get("type","slané"),
-                    "ingredients":x.get("ingredients",""),
-                    "steps":x.get("steps","")
-                })
-            return data
+            return r.json()
     except:
         pass
     return load_local()
@@ -51,8 +76,9 @@ def save_online(data):
     try:
         requests.delete(API_URL+"/all")
         requests.post(API_URL,json=data)
+        st.toast("☁ Uloženo do cloudu")
     except:
-        pass
+        st.toast("⚠ Cloud nedostupný — uloženo lokálně")
     save_local(data)
 
 # ================= STATE =================
@@ -60,14 +86,16 @@ if "recipes" not in st.session_state:
     st.session_state.recipes=load_online()
 
 # ================= HEADER =================
-c1,c2,c3=st.columns([1,1,4])
+st.markdown("<h2 style='text-align:center'>📖 Moje recepty</h2>",unsafe_allow_html=True)
+
+c1,c2,c3=st.columns([1,1,3],gap="small")
 
 with c1:
     if st.button("➕",use_container_width=True):
         st.session_state.add=True
 
 with c2:
-    if st.button("🔄",use_container_width=True):
+    if st.button("☁",use_container_width=True):
         save_online(st.session_state.recipes)
 
 search=c3.text_input("🔎 hledat")
@@ -75,7 +103,7 @@ search=c3.text_input("🔎 hledat")
 # ================= ADD =================
 if st.session_state.get("add"):
 
-    st.subheader("Nový recept")
+    st.markdown("### Nový recept")
 
     name=st.text_input("Název")
     typ=st.radio("Typ",["sladké","slané"],horizontal=True)
@@ -95,24 +123,30 @@ if st.session_state.get("add"):
 
 # ================= FILTER =================
 f1,f2=st.columns(2)
+
 show_sweet=f1.toggle("🍰 sladké",True)
 show_salty=f2.toggle("🥩 slané",True)
 
 # ================= LIST =================
 for i,r in enumerate(st.session_state.recipes):
 
-    if search and search.lower() not in r["name"].lower():
+    name=r.get("name","Bez názvu")
+    typ=r.get("type","slané")
+    ing=r.get("ingredients","")
+    steps=r.get("steps","")
+
+    if search and search.lower() not in name.lower():
         continue
-    if r["type"]=="sladké" and not show_sweet:
+    if typ=="sladké" and not show_sweet:
         continue
-    if r["type"]=="slané" and not show_salty:
+    if typ=="slané" and not show_salty:
         continue
 
     st.markdown(f"""
     <div class="card">
-    <div class="title">{'🍰' if r["type"]=="sladké" else '🥩'} {r["name"]}</div>
-    <b>Ingredience:</b><br>{r["ingredients"].replace(chr(10),"<br>")}<br><br>
-    <b>Postup:</b><br>{r["steps"].replace(chr(10),"<br>")}
+    <div class="title">{'🍰' if typ=="sladké" else '🥩'} {name}</div>
+    <b>Ingredience:</b><br>{ing.replace(chr(10),"<br>")}<br><br>
+    <b>Postup:</b><br>{steps.replace(chr(10),"<br>")}
     </div>
     """,unsafe_allow_html=True)
 
@@ -133,7 +167,7 @@ if "edit" in st.session_state:
     i=st.session_state.edit
     r=st.session_state.recipes[i]
 
-    st.subheader("Upravit recept")
+    st.markdown("### Upravit recept")
 
     name=st.text_input("Název",r["name"])
     typ=st.radio("Typ",["sladké","slané"],index=0 if r["type"]=="sladké" else 1,horizontal=True)
