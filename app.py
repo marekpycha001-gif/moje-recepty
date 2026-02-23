@@ -83,11 +83,22 @@ body,[data-testid="stAppViewContainer"]{background:radial-gradient(circle at bot
 .topbar{display:flex; justify-content:center; gap:4px; margin-bottom:10px; flex-wrap:wrap;}
 .topbtn{background:#0099ff; color:white; border:none; padding:5px 10px; border-radius:8px; font-size:18px; cursor:pointer;}
 .title{font-family:'Dancing Script',cursive; font-size:22px; text-align:center; color:#00ccff; margin-bottom:15px;}
-.stExpanderHeader{background:#1E3A8A !important; color:white !important; border-radius:10px; margin-bottom:2px; padding:5px 6px;}
-.stExpanderContent{background:#cce0ff !important; color:black !important; border-radius:10px; margin-bottom:2px; padding:4px 6px; line-height:1.2;}
-.stTextInput>div>div>input, .stNumberInput>div>div>input, textarea{color:black; margin-bottom:2px;}
-ul{padding-left:15px; margin:0;}
-li{margin-bottom:2px; line-height:1.2;}
+.stExpanderHeader{
+    background:#1E3A8A !important; 
+    color:white !important; 
+    border-radius:8px; 
+    margin:2px 0; 
+    padding:5px 6px;
+}
+.stExpanderContent{
+    background:#cce0ff !important; 
+    color:black !important; 
+    border-radius:8px; 
+    margin:2px 0; 
+    padding:4px 6px; 
+    line-height:1.2;
+}
+.stTextInput>div>div>input, .stNumberInput>div>div>input, textarea{color:black;}
 </style>
 """,unsafe_allow_html=True)
 
@@ -105,13 +116,23 @@ if st.session_state.show_search:
     search = st.text_input("Hledat recept podle názvu/ingrediencí")
 
 # ---------- UNIT CONVERSION ----------
-unit_map = {"ml":1, "l":1000, "lžíce":15, "lžic":15, "lžička":5, "lžiček":5, "hrnek":120, "hrnků":120, "cup":120, "cups":120}
-density_map = {"olej":0.92, "mléko":1.03, "voda":1.0, "med":1.42}
-ingredient_map = {"medu":"med", "medík":"med", "cukru":"cukr", "cuker":"cukr","oleje":"olej", "mlíko":"mléko"}
+unit_map = {
+    "ml":1, "l":1000,
+    "lžíce":15, "lžic":15,
+    "lžička":5, "lžiček":5,
+    "hrnek":120, "hrnků":120,
+    "cup":120, "cups":120
+}
 
-def normalize_name(name):
-    n = re.sub(r"[^\w\s]", "", name.lower().strip())
-    return ingredient_map.get(n,n)
+# hustoty pro kapaliny (ml -> g)
+density_map = {
+    "olej":0.92,
+    "mléko":1.03,
+    "voda":1.0,
+    "med":1.42,
+}
+
+ignore_units = ["ks", "kus", "kusy", "kousek", "kousky"]
 
 def convert_line(line):
     line = line.strip()
@@ -120,21 +141,40 @@ def convert_line(line):
     if not m:
         return line
     qty, unit, name = m.groups()
-    name_clean = normalize_name(name)
+    name_clean = re.sub(r"[^\w\s]", "", name.lower().strip())
+    
+    if unit and unit.lower() in ignore_units:
+        return f"{qty.strip()} {unit.strip()} {name.strip()}" if unit else f"{qty.strip()} {name.strip()}"
+    
     try:
         qty = sum(Fraction(x) for x in qty.replace(",", ".").split())
     except:
         qty = 0
-    coef = conversion_cache.get(name_clean,1)
+    coef = conversion_cache.get(name_clean, 1)
     if unit:
         coef = unit_map.get(unit.lower(), coef)
-    coef *= density_map.get(name_clean,1)
-    grams = round(float(qty)*coef)
+    if name_clean in density_map and unit and unit.lower() in ["ml","l"]:
+        coef *= density_map.get(name_clean,1)
+    grams = round(float(qty) * coef)
     conversion_cache[name_clean] = coef
     return f"{grams} g {name.strip()}"
 
 def convert_text(text):
     return "\n".join([convert_line(l) for l in text.splitlines() if l.strip()])
+
+# ---------- UPDATE STEPS TO MATCH INGREDIENTS ----------
+def sync_steps(steps, ingredients):
+    ing_dict = {}
+    for line in ingredients.splitlines():
+        m = re.match(r"(\d+)\s*g\s*(.+)", line.strip())
+        if m:
+            qty, name = m.groups()
+            ing_dict[name.lower()] = qty
+    new_steps = steps
+    for name, qty in ing_dict.items():
+        pattern = re.compile(rf"(\b{re.escape(name)}\b)", re.IGNORECASE)
+        new_steps = pattern.sub(f"{qty} g {name}", new_steps)
+    return new_steps
 
 # ---------- NEW RECIPE ----------
 if st.session_state.show_new:
@@ -146,7 +186,7 @@ if st.session_state.show_new:
     steps=st.text_area("Postup")
     def save_new_recipe():
         conv_ing = convert_text(ingredients)
-        conv_steps = convert_text(steps)
+        conv_steps = sync_steps(steps, conv_ing)
         st.session_state.recipes.insert(0,{
             "name": name or "Bez názvu",
             "type": typ,
@@ -165,9 +205,9 @@ for i,r in enumerate(st.session_state.recipes):
         continue
     with st.expander("⭐ "+r["name"] if r.get("fav") else r["name"]):
         st.markdown("### Ingredience")
-        st.markdown("<ul style='margin:0;padding-left:15px;'>"+ "".join([f"<li>{line}</li>" for line in r["ingredients"].splitlines()])+"</ul>", unsafe_allow_html=True)
+        for line in r["ingredients"].splitlines(): st.write("•", line)
         st.markdown("### Postup")
-        st.markdown("<ul style='margin:0;padding-left:15px;'>"+ "".join([f"<li>{line}</li>" for line in r["steps"].splitlines()])+"</ul>", unsafe_allow_html=True)
+        for line in r["steps"].splitlines(): st.write(line)
         c1,c2,c3 = st.columns([1,1,1])
         c1.button("⭐", key=f"fav{i}", on_click=lambda i=i: [st.session_state.recipes[i].update({"fav": not st.session_state.recipes[i]["fav"]}), save_db()])
         c2.button("🗑", key=f"del{i}", on_click=lambda i=i: [st.session_state.recipes.pop(i), save_db()])
@@ -183,12 +223,14 @@ if st.session_state.edit_index is not None:
     edit_ingredients = st.text_area("Ingredience", r["ingredients"])
     edit_steps = st.text_area("Postup", r["steps"])
     def save_edit():
+        conv_ing = convert_text(edit_ingredients)
+        conv_steps = sync_steps(edit_steps, conv_ing)
         r.update({
             "name": edit_name,
             "type": edit_type,
             "portions": edit_portions,
-            "ingredients": convert_text(edit_ingredients),
-            "steps": convert_text(edit_steps)
+            "ingredients": conv_ing,
+            "steps": conv_steps
         })
         save_db()
         st.session_state.edit_index = None
