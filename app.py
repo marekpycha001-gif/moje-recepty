@@ -128,8 +128,6 @@ if st.session_state.show_new:
             "fav":False
         })
         save_db()
-        st.experimental_rerun()
-
     st.button("Uložit recept", on_click=save_new_recipe)
 
 # ---------- FILTER BY TYPE ----------
@@ -154,33 +152,48 @@ for i,r in enumerate(st.session_state.recipes):
 
     with st.expander(title):
 
-        mult = st.slider("Porce",1,20,r["portions"],key=f"portions{i}")
+        # --- FORM FOR EDIT ---
+        edit_name = st.text_input("Název", r["name"], key=f"name{i}")
+        edit_type = st.radio("Typ", ["sladké","slané"], index=0 if r["type"]=="sladké" else 1, key=f"type{i}")
+        edit_category = st.text_input("Kategorie", r["category"], key=f"cat{i}")
+        edit_portions = st.number_input("Počet porcí",1,20,r["portions"], key=f"portions{i}")
+        edit_ingredients = st.text_area("Ingredience", r["ingredients"], key=f"ing{i}")
+        edit_steps = st.text_area("Postup", r["steps"], key=f"steps{i}")
 
-        st.markdown(f"**Kategorie:** {r['category']}")
+        def save_edit(i=i):
+            r["name"] = edit_name
+            r["type"] = edit_type
+            r["category"] = edit_category
+            r["portions"] = edit_portions
+            r["ingredients"] = edit_ingredients
+            r["steps"] = edit_steps
+            save_db()
+        st.button("💾 Uložit změny", key=f"save{i}", on_click=save_edit)
 
-        st.markdown("**Ingredience**")
-        for line in r["ingredients"].splitlines():
+        # --- SLIDER PORCÍ PRO ZOBRAZENÍ ---
+        st.markdown("### Ingredience podle porcí")
+        for line in edit_ingredients.splitlines():
             m = re.search(r'(\d+)',line)
+            display_line = line
             if m:
                 num=int(m.group(1))
-                new=int(num*mult/r["portions"])
-                line=line.replace(str(num),str(new),1)
-            st.write("•",line)
+                new=int(num*edit_portions/r["portions"])
+                display_line=line.replace(str(num),str(new),1)
+            st.write("•",display_line)
 
         st.markdown("**Postup**")
-        st.write(r["steps"])
+        st.write(edit_steps)
 
+        # --- ACTIONS ---
         c1,c2,c3=st.columns([1,1,1])
         def toggle_fav(i=i):
             r["fav"]=not r.get("fav",False)
             save_db()
-            st.experimental_rerun()
         st.button("⭐", key=f"fav{i}", on_click=toggle_fav)
 
         def delete_recipe(i=i):
             st.session_state.recipes.pop(i)
             save_db()
-            st.experimental_rerun()
         st.button("🗑", key=f"del{i}", on_click=delete_recipe)
 
         def sync_recipe(i=i):
