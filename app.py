@@ -111,6 +111,14 @@ unit_map = {
     "cup":120, "cups":120
 }
 
+# hustoty pro kapaliny
+density_map = {
+    "olej":0.92,
+    "mléko":1.03,
+    "voda":1.0,
+    "med":1.42,
+}
+
 def convert_line(line):
     line = line.strip()
     pattern = r"([\d\s\/,.]+)\s*([^\d\s]+)?\s*(.+)"
@@ -126,6 +134,7 @@ def convert_line(line):
     coef = conversion_cache.get(name_clean,1)
     if unit:
         coef = unit_map.get(unit.lower(), coef)
+    coef *= density_map.get(name_clean,1)  # přepočet podle hustoty
     grams = round(float(qty)*coef)
     conversion_cache[name_clean] = coef
     return f"{grams} g {name.strip()}"
@@ -179,7 +188,7 @@ if st.session_state.edit_index is not None:
     edit_portions = st.number_input("Počet porcí",1,20,r["portions"])
     edit_ingredients = st.text_area("Ingredience", r["ingredients"])
     edit_steps = st.text_area("Postup", r["steps"])
-    if st.button("💾 Uložit změny"):
+    def save_edit():
         r.update({
             "name": edit_name,
             "type": edit_type,
@@ -189,4 +198,4 @@ if st.session_state.edit_index is not None:
         })
         save_db()
         st.session_state.edit_index = None
-        st.experimental_rerun()
+    st.button("💾 Uložit změny", on_click=save_edit)
