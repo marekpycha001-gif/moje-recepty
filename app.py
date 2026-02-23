@@ -10,8 +10,7 @@ LOCAL_FILE="recipes.json"
 defaults={
     "recipes":[],
     "show_new":False,
-    "show_search":False,
-    "show_api":False
+    "show_search":False
 }
 for k,v in defaults.items():
     if k not in st.session_state:
@@ -80,14 +79,25 @@ body,[data-testid="stAppViewContainer"]{background:radial-gradient(circle at bot
 </style>
 """,unsafe_allow_html=True)
 
+# ---------- CALLBACKS ----------
+def toggle_show_new():
+    st.session_state.show_new = not st.session_state.show_new
+
+def toggle_show_search():
+    st.session_state.show_search = not st.session_state.show_search
+
+def sync_all():
+    save_db()
+    st.success("Synchronizováno!")
+
 # ---------- TOP ICON BAR ----------
 col1, col2, col3 = st.columns([1,1,1])
 with col1:
-    if st.button("➕", key="show_new"): st.session_state.show_new = not st.session_state.show_new
+    st.button("➕", on_click=toggle_show_new)
 with col2:
-    if st.button("🔍", key="show_search"): st.session_state.show_search = not st.session_state.show_search
+    st.button("🔍", on_click=toggle_show_search)
 with col3:
-    if st.button("☁️ Sync", key="sync_all"): save_db(); st.success("Synchronizováno!")
+    st.button("☁️ Sync", on_click=sync_all)
 
 # ---------- TITLE ----------
 st.markdown('<div class="title">Márova kuchařka</div>',unsafe_allow_html=True)
@@ -107,7 +117,7 @@ if st.session_state.show_new:
     ingredients=st.text_area("Ingredience (každá na nový řádek)")
     steps=st.text_area("Postup")
 
-    if st.button("Uložit recept"):
+    def save_new_recipe():
         st.session_state.recipes.insert(0,{
             "name":name or "Bez názvu",
             "type":typ,
@@ -120,13 +130,13 @@ if st.session_state.show_new:
         save_db()
         st.experimental_rerun()
 
+    st.button("Uložit recept", on_click=save_new_recipe)
+
 # ---------- FILTER BY TYPE ----------
 st.markdown("### Filtr:")
 filt_col1, filt_col2 = st.columns(2)
-with filt_col1:
-    show_sladke = st.button("Sladké")
-with filt_col2:
-    show_slane = st.button("Slané")
+show_sladke = st.button("Sladké")
+show_slane = st.button("Slané")
 
 # ---------- DISPLAY RECIPES ----------
 for i,r in enumerate(st.session_state.recipes):
@@ -144,7 +154,6 @@ for i,r in enumerate(st.session_state.recipes):
 
     with st.expander(title):
 
-        # slider porcí
         mult = st.slider("Porce",1,20,r["portions"],key=f"portions{i}")
 
         st.markdown(f"**Kategorie:** {r['category']}")
@@ -162,18 +171,22 @@ for i,r in enumerate(st.session_state.recipes):
         st.write(r["steps"])
 
         c1,c2,c3=st.columns([1,1,1])
-        with c1:
-            if st.button("⭐",key=f"fav{i}"):
-                r["fav"]=not r.get("fav",False)
-                save(); st.experimental_rerun()
-        with c2:
-            if st.button("🗑",key=f"del{i}"):
-                st.session_state.recipes.pop(i)
-                save(); st.experimental_rerun()
-        with c3:
-            if st.button("☁️",key=f"sync{i}"):
-                try:
-                    requests.post(SDB_URL,json=r)
-                    st.success("Synchronizováno")
-                except:
-                    st.warning("Nepodařilo se připojit k Google Sheet")
+        def toggle_fav(i=i):
+            r["fav"]=not r.get("fav",False)
+            save_db()
+            st.experimental_rerun()
+        st.button("⭐", key=f"fav{i}", on_click=toggle_fav)
+
+        def delete_recipe(i=i):
+            st.session_state.recipes.pop(i)
+            save_db()
+            st.experimental_rerun()
+        st.button("🗑", key=f"del{i}", on_click=delete_recipe)
+
+        def sync_recipe(i=i):
+            try:
+                requests.post(SDB_URL,json=r)
+                st.success("Synchronizováno")
+            except:
+                st.warning("Nepodařilo se připojit k Google Sheet")
+        st.button("☁️", key=f"sync{i}", on_click=sync_recipe)
