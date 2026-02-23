@@ -83,21 +83,8 @@ body,[data-testid="stAppViewContainer"]{background:radial-gradient(circle at bot
 .topbar{display:flex; justify-content:center; gap:4px; margin-bottom:10px; flex-wrap:wrap;}
 .topbtn{background:#0099ff; color:white; border:none; padding:5px 10px; border-radius:8px; font-size:18px; cursor:pointer;}
 .title{font-family:'Dancing Script',cursive; font-size:22px; text-align:center; color:#00ccff; margin-bottom:15px;}
-.stExpanderHeader{
-    background:#1E3A8A !important; 
-    color:white !important; 
-    border-radius:8px; 
-    margin:2px 0; 
-    padding:5px 6px;
-}
-.stExpanderContent{
-    background:#cce0ff !important; 
-    color:black !important; 
-    border-radius:8px; 
-    margin:2px 0; 
-    padding:4px 6px; 
-    line-height:1.2;
-}
+.stExpanderHeader{background:#1E3A8A !important; color:white !important; border-radius:10px; margin-bottom:2px;}
+.stExpanderContent{background:#cce0ff !important; color:black !important; border-radius:10px; padding:4px;}
 .stTextInput>div>div>input, .stNumberInput>div>div>input, textarea{color:black;}
 </style>
 """,unsafe_allow_html=True)
@@ -124,7 +111,6 @@ unit_map = {
     "cup":120, "cups":120
 }
 
-# hustoty pro kapaliny (ml -> g)
 density_map = {
     "olej":0.92,
     "mléko":1.03,
@@ -132,7 +118,7 @@ density_map = {
     "med":1.42,
 }
 
-ignore_units = ["ks", "kus", "kusy", "kousek", "kousky"]
+no_convert_units = ["ks","kus","kusy"]
 
 def convert_line(line):
     line = line.strip()
@@ -142,39 +128,22 @@ def convert_line(line):
         return line
     qty, unit, name = m.groups()
     name_clean = re.sub(r"[^\w\s]", "", name.lower().strip())
-    
-    if unit and unit.lower() in ignore_units:
-        return f"{qty.strip()} {unit.strip()} {name.strip()}" if unit else f"{qty.strip()} {name.strip()}"
-    
+    if unit and unit.lower() in no_convert_units:
+        return f"{qty} {unit} {name.strip()}"
     try:
         qty = sum(Fraction(x) for x in qty.replace(",", ".").split())
     except:
         qty = 0
-    coef = conversion_cache.get(name_clean, 1)
+    coef = conversion_cache.get(name_clean,1)
     if unit:
         coef = unit_map.get(unit.lower(), coef)
-    if name_clean in density_map and unit and unit.lower() in ["ml","l"]:
-        coef *= density_map.get(name_clean,1)
-    grams = round(float(qty) * coef)
+    coef *= density_map.get(name_clean,1)
+    grams = round(float(qty)*coef)
     conversion_cache[name_clean] = coef
     return f"{grams} g {name.strip()}"
 
 def convert_text(text):
     return "\n".join([convert_line(l) for l in text.splitlines() if l.strip()])
-
-# ---------- UPDATE STEPS TO MATCH INGREDIENTS ----------
-def sync_steps(steps, ingredients):
-    ing_dict = {}
-    for line in ingredients.splitlines():
-        m = re.match(r"(\d+)\s*g\s*(.+)", line.strip())
-        if m:
-            qty, name = m.groups()
-            ing_dict[name.lower()] = qty
-    new_steps = steps
-    for name, qty in ing_dict.items():
-        pattern = re.compile(rf"(\b{re.escape(name)}\b)", re.IGNORECASE)
-        new_steps = pattern.sub(f"{qty} g {name}", new_steps)
-    return new_steps
 
 # ---------- NEW RECIPE ----------
 if st.session_state.show_new:
@@ -186,7 +155,7 @@ if st.session_state.show_new:
     steps=st.text_area("Postup")
     def save_new_recipe():
         conv_ing = convert_text(ingredients)
-        conv_steps = sync_steps(steps, conv_ing)
+        conv_steps = convert_text(steps)
         st.session_state.recipes.insert(0,{
             "name": name or "Bez názvu",
             "type": typ,
@@ -203,34 +172,33 @@ if st.session_state.show_new:
 for i,r in enumerate(st.session_state.recipes):
     if search and search.lower() not in (r["name"]+r["ingredients"]).lower():
         continue
-    with st.expander("⭐ "+r["name"] if r.get("fav") else r["name"]):
+    with st.expander("⭐ "+r["name"] if r.get("fav") else r["name"], expanded=False):
         st.markdown("### Ingredience")
-        for line in r["ingredients"].splitlines(): st.write("•", line)
+        for line in r["ingredients"].splitlines(): st.write("•", line, unsafe_allow_html=True)
         st.markdown("### Postup")
         for line in r["steps"].splitlines(): st.write(line)
         c1,c2,c3 = st.columns([1,1,1])
         c1.button("⭐", key=f"fav{i}", on_click=lambda i=i: [st.session_state.recipes[i].update({"fav": not st.session_state.recipes[i]["fav"]}), save_db()])
         c2.button("🗑", key=f"del{i}", on_click=lambda i=i: [st.session_state.recipes.pop(i), save_db()])
-        c3.button("✏️", key=f"edit{i}", on_click=lambda i=i: st.session_state.update({"edit_index": i}))
+        c3.button("✏️", key=f"edit{i}", on_click=lambda i=i: st.session_state.update({"edit_index": i, "scroll_index": i}))
 
 # ---------- EDIT ----------
 if st.session_state.edit_index is not None:
-    r = st.session_state.recipes[st.session_state.edit_index]
+    idx = st.session_state.edit_index
+    r = st.session_state.recipes[idx]
     st.markdown(f"### Editace receptu: {r['name']}")
-    edit_name = st.text_input("Název", r["name"])
-    edit_type = st.radio("Typ", ["sladké","slané"], index=0 if r["type"]=="sladké" else 1)
-    edit_portions = st.number_input("Počet porcí",1,20,r["portions"])
-    edit_ingredients = st.text_area("Ingredience", r["ingredients"])
-    edit_steps = st.text_area("Postup", r["steps"])
+    edit_name = st.text_input("Název", r["name"], key=f"ename{idx}")
+    edit_type = st.radio("Typ", ["sladké","slané"], index=0 if r["type"]=="sladké" else 1, key=f"etype{idx}")
+    edit_portions = st.number_input("Počet porcí",1,20,r["portions"], key=f"epor{idx}")
+    edit_ingredients = st.text_area("Ingredience", r["ingredients"], key=f"eing{idx}")
+    edit_steps = st.text_area("Postup", r["steps"], key=f"estep{idx}")
     def save_edit():
-        conv_ing = convert_text(edit_ingredients)
-        conv_steps = sync_steps(edit_steps, conv_ing)
         r.update({
             "name": edit_name,
             "type": edit_type,
             "portions": edit_portions,
-            "ingredients": conv_ing,
-            "steps": conv_steps
+            "ingredients": convert_text(edit_ingredients),
+            "steps": convert_text(edit_steps)
         })
         save_db()
         st.session_state.edit_index = None
