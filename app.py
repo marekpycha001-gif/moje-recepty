@@ -10,7 +10,7 @@ LOCAL_FILE = "recipes.json"
 CACHE_FILE = "conversion_cache.json"
 
 # ---------- SESSION ----------
-defaults = {"recipes": [], "show_new": False, "show_search": False, "edit_index": None, "filter_type": "vše"}
+defaults = {"recipes": [], "show_new": False, "show_search": False, "edit_index": None}
 for k, v in defaults.items():
     if k not in st.session_state:
         st.session_state[k] = v
@@ -84,8 +84,8 @@ body,[data-testid="stAppViewContainer"]{background:radial-gradient(circle at bot
 .topbtn{background:#0099ff; color:white; border:none; padding:5px 10px; border-radius:8px; font-size:18px; cursor:pointer;}
 .title{font-family:'Dancing Script',cursive; font-size:22px; text-align:center; color:#00ccff; margin-bottom:15px;}
 .stExpanderHeader{background:#1E3A8A !important; color:white !important; border-radius:10px; margin-bottom:2px;}
-.stExpanderContent{background:#cce0ff !important; color:black !important; border-radius:10px; padding:5px;}
-.stTextInput>div>div>input, .stNumberInput>div>div>input, textarea{color:black;}
+.stExpanderContent{background:#cce0ff !important; color:black !important; border-radius:10px; margin-bottom:5px;}
+.stTextInput>div>div>input, .stNumberInput>div>div>input, textarea{color:black; margin-bottom:2px;}
 </style>
 """,unsafe_allow_html=True)
 
@@ -102,10 +102,6 @@ search=""
 if st.session_state.show_search:
     search = st.text_input("Hledat recept podle názvu/ingrediencí")
 
-# ---------- FILTER SLADKÉ/SLANÉ ----------
-filter_type = st.radio("Filtrovat recepty", ["vše","sladké","slané"], horizontal=True)
-st.session_state.filter_type = filter_type
-
 # ---------- UNIT CONVERSION ----------
 unit_map = {
     "ml":1, "l":1000,
@@ -115,12 +111,23 @@ unit_map = {
     "cup":120, "cups":120
 }
 
+# hustoty pro kapaliny
 density_map = {
     "olej":0.92,
     "mléko":1.03,
     "voda":1.0,
     "med":1.42,
 }
+
+# mapování variant názvů surovin pro správný převod
+ingredient_map = {
+    "medu":"med", "medík":"med", "cukru":"cukr", "cuker":"cukr",
+    "oleje":"olej", "mlíko":"mléko"
+}
+
+def normalize_name(name):
+    n = re.sub(r"[^\w\s]", "", name.lower().strip())
+    return ingredient_map.get(n,n)
 
 def convert_line(line):
     line = line.strip()
@@ -129,7 +136,7 @@ def convert_line(line):
     if not m:
         return line
     qty, unit, name = m.groups()
-    name_clean = re.sub(r"[^\w\s]", "", name.lower().strip())
+    name_clean = normalize_name(name)
     try:
         qty = sum(Fraction(x) for x in qty.replace(",", ".").split())
     except:
@@ -137,6 +144,7 @@ def convert_line(line):
     coef = conversion_cache.get(name_clean,1)
     if unit:
         coef = unit_map.get(unit.lower(), coef)
+    # pokud je kapalina, přepočet podle hustoty
     coef *= density_map.get(name_clean,1)
     grams = round(float(qty)*coef)
     conversion_cache[name_clean] = coef
@@ -166,19 +174,17 @@ if st.session_state.show_new:
         })
         save_db()
         st.session_state.show_new = False
-    st.button("Uložit recept", on_click=save_new_recipe)
+    st.button("Čimilali", on_click=save_new_recipe)
 
 # ---------- DISPLAY RECIPES ----------
 for i,r in enumerate(st.session_state.recipes):
     if search and search.lower() not in (r["name"]+r["ingredients"]).lower():
         continue
-    if st.session_state.filter_type != "vše" and r["type"] != st.session_state.filter_type:
-        continue
-    with st.expander("⭐ "+r["name"] if r.get("fav") else r["name"], expanded=False):
-        # ingredience a postup
-        for line in r["ingredients"].splitlines(): st.markdown(f"<div style='margin:2px 0'>• {line}</div>",unsafe_allow_html=True)
-        for line in r["steps"].splitlines(): st.markdown(f"<div style='margin:2px 0'>{line}</div>",unsafe_allow_html=True)
-        # tlačítka
+    with st.expander("⭐ "+r["name"] if r.get("fav") else r["name"]):
+        st.markdown("### Ingredience")
+        for line in r["ingredients"].splitlines(): st.write("•", line)
+        st.markdown("### Postup")
+        for line in r["steps"].splitlines(): st.write(line)
         c1,c2,c3 = st.columns([1,1,1])
         c1.button("⭐", key=f"fav{i}", on_click=lambda i=i: [st.session_state.recipes[i].update({"fav": not st.session_state.recipes[i]["fav"]}), save_db()])
         c2.button("🗑", key=f"del{i}", on_click=lambda i=i: [st.session_state.recipes.pop(i), save_db()])
