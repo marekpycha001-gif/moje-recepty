@@ -4,161 +4,169 @@ import re
 
 st.set_page_config(page_title="Recepty", layout="centered")
 
-API_URL = "https://sheetdb.io/api/v1/5ygnspqc90f9d"
+API_URL="https://sheetdb.io/api/v1/5ygnspqc90f9d"
 
-# ---------- STYLY ----------
+# ---------- STYL ----------
 st.markdown("""
 <style>
-.block-container {padding-top:1.5rem;padding-bottom:4rem;}
-textarea,input{font-size:16px !important;}
-.ing{line-height:1.15em;margin:0;padding:0;}
-button[kind="secondary"]{border-radius:12px;}
+.block-container{padding-top:1rem;padding-bottom:4rem;}
+.ing{margin:0;line-height:1.2em;}
+button{border-radius:12px!important;}
 </style>
-""", unsafe_allow_html=True)
+""",unsafe_allow_html=True)
 
 # ---------- PŘEVODY ----------
-densities = {
-    "olej":0.92,
-    "mléko":1.03,
-    "voda":1.0,
-    "med":1.42
+densities={
+ "olej":0.92,
+ "mléko":1.03,
+ "voda":1.0,
+ "med":1.42
 }
 
-spoon = {
-    "lž":15,
-    "lžíce":15,
-    "lžič":5,
-    "lžička":5,
-    "hrnek":240,
-    "hrnky":240
+units={
+ "lž":15,"lžíce":15,
+ "lžič":5,"lžička":5,
+ "hrnek":240,"hrnky":240
 }
 
-def normalize(txt):
-    return txt.lower().strip()
-
-def detect_density(name):
-    name = normalize(name)
+def density(name):
+    name=name.lower()
     for k,v in densities.items():
         if k in name:
             return v
     return 1.0
 
-def convert_line(line):
-    if "|c" in line:
-        return line.replace("|c","")
+def convert(line):
+    if "|manual" in line:
+        return line
 
-    l=line.lower().strip()
+    txt=line.strip().lower()
 
-    m = re.match(r"([\d\.,]+)\s*(ml|l|g|kg)\s+(.*)", l)
+    # číslo + jednotka + surovina
+    m=re.match(r"([\d\.,]+)\s*(ml|l|g|kg)\s+(.*)",txt)
     if m:
-        val=float(m.group(1).replace(",",".")) 
+        val=float(m.group(1).replace(",","."))
         unit=m.group(2)
         name=m.group(3)
 
-        if unit=="kg": val*=1000
-        if unit=="l": val*=1000
+        if unit=="kg":
+            val*=1000
+        if unit=="l":
+            val*=1000
 
         if unit in ["ml","l"]:
-            val*=detect_density(name)
+            val*=density(name)
 
-        grams=round(val)
-        return f"{grams} g {name}|c"
+        return f"{round(val)} g {name}"
 
-    m = re.match(r"([\d\.,]+)\s*(lž|lžíce|lžič|lžička|hrnek|hrnky)\s+(.*)", l)
+    # lžíce hrnky
+    m=re.match(r"([\d\.,]+)\s*(lž|lžíce|lžič|lžička|hrnek|hrnky)\s+(.*)",txt)
     if m:
-        val=float(m.group(1).replace(",",".")) 
+        val=float(m.group(1).replace(",","."))
         unit=m.group(2)
         name=m.group(3)
 
-        ml = val*spoon[unit]
-        grams = round(ml*detect_density(name))
-        return f"{grams} g {name}|c"
+        ml=val*units[unit]
+        g=ml*density(name)
+
+        return f"{round(g)} g {name}"
 
     return line
 
 def convert_block(text):
-    lines=text.splitlines()
-    return "\n".join(convert_line(x) for x in lines if x.strip())
+    return "\n".join(convert(l) for l in text.splitlines() if l.strip())
 
 # ---------- API ----------
-def load_recipes():
+def load():
     try:
-        r=requests.get(API_URL).json()
-        return r
+        r=requests.get(API_URL)
+        data=r.json()
+        return [x for x in data if isinstance(x,dict) and x.get("name")]
     except:
         return []
 
-def save_recipe(data):
+def save(data):
     requests.post(API_URL,json=data)
 
-def update_recipe(name,data):
+def update(name,data):
     requests.patch(f"{API_URL}/name/{name}",json=data)
 
-def delete_recipe(name):
+def delete(name):
     requests.delete(f"{API_URL}/name/{name}")
 
-recipes = load_recipes()
+recipes=load()
 
-# ---------- NOVÝ ----------
-if "show_new" not in st.session_state:
-    st.session_state.show_new=False
+# ---------- HEADER ----------
+if "new" not in st.session_state:
+    st.session_state.new=False
 
-col1,col2=st.columns([1,8])
+col1,col2=st.columns([1,7])
 if col1.button("➕"):
-    st.session_state.show_new=not st.session_state.show_new
+    st.session_state.new=not st.session_state.new
 
 st.title("📒 Recepty")
 
-if st.session_state.show_new:
-    with st.container():
-        name=st.text_input("Název")
-        portions=st.number_input("Porce",1,20,1)
-        ing=st.text_area("Ingredience (řádek = položka)")
-        steps=st.text_area("Postup")
+# ---------- NOVÝ ----------
+if st.session_state.new:
 
-        if st.button("Uložit"):
-            if name:
-                data={
-                    "name":name,
-                    "type":"",
-                    "portions":portions,
-                    "ingredients":convert_block(ing),
-                    "steps":steps,
-                    "fav":""
-                }
-                save_recipe(data)
-                st.session_state.show_new=False
-                st.rerun()
+    name=st.text_input("Název")
+    portions=st.number_input("Porce",1,20,1)
+    ing=st.text_area("Ingredience")
+    steps=st.text_area("Postup")
 
-# ---------- LIST ----------
-for r in recipes:
-    with st.expander(r["name"]):
-
-        colA,colB=st.columns([8,1])
-        edit=colB.button("✏️",key="e"+r["name"])
-        delete=colB.button("🗑️",key="d"+r["name"])
-
-        if delete:
-            delete_recipe(r["name"])
+    if st.button("Uložit"):
+        if name:
+            save({
+                "name":name,
+                "type":"",
+                "portions":portions,
+                "ingredients":convert_block(ing),
+                "steps":steps,
+                "fav":""
+            })
+            st.session_state.new=False
             st.rerun()
 
-        mult = st.slider("Porce",1,20,int(r["portions"]),key=r["name"])
+# ---------- SEZNAM ----------
+for r in recipes:
+
+    with st.expander(r["name"]):
+
+        c1,c2=st.columns([8,1])
+
+        edit=c2.button("✏️",key="e"+r["name"])
+        delete_btn=c2.button("🗑️",key="d"+r["name"])
+
+        if delete_btn:
+            delete(r["name"])
+            st.rerun()
+
+        portions=int(r.get("portions",1))
+        st.slider("Porce",1,20,portions,key="p"+r["name"])
 
         st.markdown("**Ingredience**")
-        for line in r["ingredients"].splitlines():
-            st.markdown(f"<div class='ing'>{line.replace('|c','')}</div>",unsafe_allow_html=True)
+        for l in r.get("ingredients","").splitlines():
+            st.markdown(f"<div class='ing'>{l}</div>",unsafe_allow_html=True)
 
         st.markdown("**Postup**")
-        st.write(r["steps"])
+        st.write(r.get("steps",""))
 
+        # ---------- EDIT ----------
         if edit:
-            new_ing=st.text_area("Upravit ingredience",r["ingredients"].replace("|c",""),key="i"+r["name"])
-            new_steps=st.text_area("Upravit postup",r["steps"],key="s"+r["name"])
+
+            new_ing=st.text_area("Ingredience",
+                                 r.get("ingredients",""),
+                                 key="i"+r["name"])
+
+            new_steps=st.text_area("Postup",
+                                   r.get("steps",""),
+                                   key="s"+r["name"])
 
             if st.button("Uložit změny",key="u"+r["name"]):
-                data={
+
+                update(r["name"],{
                     "ingredients":convert_block(new_ing),
                     "steps":new_steps
-                }
-                update_recipe(r["name"],data)
+                })
+
                 st.rerun()
