@@ -1,195 +1,153 @@
 import streamlit as st
-import requests, json, os, re
+import json, os, re, requests
 
-st.set_page_config("Moje recepty", layout="centered")
+st.set_page_config(page_title="Moje recepty", layout="centered")
 
-API_URL="https://sheetdb.io/api/v1/5ygnspqc90f9d"
-LOCAL="recepty.json"
-
-# ================= DESIGN =================
+# ---------- STYLE ----------
 st.markdown("""
 <style>
-.block-container{padding-top:4rem;padding-bottom:2rem;max-width:700px;}
-[data-testid="stAppViewContainer"]{
-background: radial-gradient(circle at top,#0f2027,#203a43,#2c5364);
-color:white;
+.block-container {padding-top:1rem;padding-bottom:6rem;}
+button[kind="primary"]{
+    width:100%;border-radius:15px;height:3em;font-size:18px;
 }
-.card{
-background:white;color:black;padding:18px;border-radius:18px;
-box-shadow:0 6px 18px rgba(0,0,0,0.2);margin-bottom:18px;
+.bottom{
+position:fixed;bottom:0;left:0;right:0;
+background:#0e1117;padding:10px;z-index:999;
+border-top:1px solid #333;
 }
-.title{font-size:20px;font-weight:700;}
-input,textarea{color:black!important;}
 </style>
 """,unsafe_allow_html=True)
 
-# ================= UNIT CONVERTER =================
-density={"olej":0.92,"mléko":1.03,"voda":1,"cukr":0.85,"mouka":0.53,"med":1.42,"máslo":0.96}
-spoon={"cukr":12,"mouka":10,"olej":13,"med":21,"máslo":14}
+FILE="recipes.json"
 
-def convert_units(text):
-    out=[]
-    for line in text.split("\n"):
-        m=re.search(r"(\\d+)\\s*ml\\s*(\\w+)",line.lower())
-        if m and m.group(2) in density:
-            g=round(int(m.group(1))*density[m.group(2)])
-            line+=f" → {g} g"
-        m=re.search(r"(\\d+)\\s*lž[ií]ce?\\s*(\\w+)",line.lower())
-        if m and m.group(2) in spoon:
-            g=int(m.group(1))*spoon[m.group(2)]
-            line+=f" → {g} g"
-        out.append(line)
-    return "\n".join(out)
-
-# ================= PORTION SCALER =================
-def scale_ingredients(text,factor):
-    def repl(m):
-        num=float(m.group(0))
-        return str(round(num*factor,2))
-    return re.sub(r"\d+\\.?\\d*",repl,text)
-
-# ================= DATA =================
-def load_local():
-    if os.path.exists(LOCAL):
-        return json.load(open(LOCAL,"r",encoding="utf8"))
-    return []
-
-def save_local(d):
-    json.dump(d,open(LOCAL,"w",encoding="utf8"),ensure_ascii=False,indent=2)
-
-def load_online():
-    try:
-        r=requests.get(API_URL,timeout=5)
-        if r.status_code==200:
-            return r.json()
-    except: pass
-    return load_local()
-
-def save_online(data):
-    try:
-        requests.delete(API_URL+"/all")
-        requests.post(API_URL,json=data)
-        st.toast("☁ Uloženo do cloudu")
-    except:
-        st.toast("⚠ Cloud nedostupný — uloženo lokálně")
-    save_local(data)
-
-# ================= STATE =================
+# ---------- LOAD ----------
 if "recipes" not in st.session_state:
-    st.session_state.recipes=load_online()
+    if os.path.exists(FILE):
+        st.session_state.recipes=json.load(open(FILE,"r",encoding="utf8"))
+    else:
+        st.session_state.recipes=[]
 
-# ================= HEADER =================
-st.markdown("<h2 style='text-align:center'>📖 Moje recepty</h2>",unsafe_allow_html=True)
+def save():
+    json.dump(st.session_state.recipes,open(FILE,"w",encoding="utf8"),ensure_ascii=False,indent=2)
 
-c1,c2,c3=st.columns([1,1,3])
+# ---------- CONVERT ----------
+density={"olej":0.92,"mléko":1.03,"cukr":0.85,"mouka":0.53,"voda":1}
+units={"lžíce":15,"lžička":5,"hrnek":240}
 
-with c1:
-    if st.button("➕",use_container_width=True):
-        st.session_state.add=True
-with c2:
-    if st.button("☁",use_container_width=True):
-        save_online(st.session_state.recipes)
+def convert(line):
+    l=line.lower()
 
-search=c3.text_input("🔎 hledat")
+    m=re.search(r'(\d+)\s*ml\s*(\w+)',l)
+    if m:
+        g=int(int(m.group(1))*density.get(m.group(2),1))
+        return f"{g} g {m.group(2)}"
 
-# ================= ADD =================
-if st.session_state.get("add"):
+    m=re.search(r'(\d+)\s*(lž[íi]ce|lž[íi]čka|hrnek)\s*(\w+)',l)
+    if m:
+        ml=units.get(m.group(2),0)*int(m.group(1))
+        g=int(ml*density.get(m.group(3),1))
+        return f"{g} g {m.group(3)}"
 
-    st.markdown("### Nový recept")
+    return line
+
+def convert_all(text):
+    return "\n".join(convert(x) for x in text.splitlines())
+
+# ---------- PAGE ----------
+if "page" not in st.session_state:
+    st.session_state.page="list"
+
+# ---------- ADD ----------
+if st.session_state.page=="add":
+    st.title("Nový recept")
 
     name=st.text_input("Název")
     typ=st.radio("Typ",["sladké","slané"],horizontal=True)
-    portions=st.number_input("Počet porcí",1,50,1)
+    cat=st.text_input("Kategorie")
+    portions=st.number_input("Porce",1,20,4)
     ing=st.text_area("Ingredience")
     steps=st.text_area("Postup")
 
-    if st.button("Uložit",use_container_width=True):
-
-        ing=convert_units(ing)
-
-        st.session_state.recipes.insert(0,{
+    if st.button("Uložit",type="primary"):
+        st.session_state.recipes.append({
             "name":name,
             "type":typ,
-            "ingredients":ing,
+            "category":cat,
+            "portions":portions,
+            "ingredients":convert_all(ing),
             "steps":steps,
-            "portions":portions
+            "fav":False
         })
-
-        save_online(st.session_state.recipes)
-        st.session_state.add=False
+        save()
+        st.session_state.page="list"
         st.rerun()
 
-# ================= FILTER =================
-f1,f2=st.columns(2)
-show_sweet=f1.toggle("🍰 sladké",True)
-show_salty=f2.toggle("🥩 slané",True)
+# ---------- LIST ----------
+if st.session_state.page=="list":
 
-# ================= LIST =================
-for i,r in enumerate(st.session_state.recipes):
+    st.title("Moje recepty")
 
-    name=r.get("name","Bez názvu")
-    typ=r.get("type","slané")
-    ing=r.get("ingredients","")
-    steps=r.get("steps","")
-    portions=r.get("portions",1)
+    q=st.text_input("Hledat")
+    filt=st.radio("Filtr",["vše","sladké","slané","⭐ oblíbené"],horizontal=True)
 
-    if search and search.lower() not in name.lower():
-        continue
-    if typ=="sladké" and not show_sweet:
-        continue
-    if typ=="slané" and not show_salty:
-        continue
+    cats=sorted({r.get("category","") for r in st.session_state.recipes if r.get("category")})
+    cat_filter=st.selectbox("Kategorie",["vše"]+cats)
 
-    with st.expander(f"{'🍰' if typ=='sladké' else '🥩'} {name}"):
+    for i,r in enumerate(st.session_state.recipes):
 
-        new_portions=st.slider("Počet porcí",1,20,portions,key="p"+str(i))
-        factor=new_portions/portions
-        scaled=scale_ingredients(ing,factor)
+        if q and q.lower() not in r["name"].lower(): continue
+        if filt=="sladké" and r["type"]!="sladké": continue
+        if filt=="slané" and r["type"]!="slané": continue
+        if filt=="⭐ oblíbené" and not r.get("fav"): continue
+        if cat_filter!="vše" and r.get("category")!=cat_filter: continue
 
-        st.markdown(f"""
-        <div class="card">
-        <b>Ingredience:</b><br>{scaled.replace(chr(10),"<br>")}<br><br>
-        <b>Postup:</b><br>{steps.replace(chr(10),"<br>")}
-        </div>
-        """,unsafe_allow_html=True)
+        title=("⭐ " if r.get("fav") else "")+("🍰 " if r["type"]=="sladké" else "🥩 ")+r["name"]
 
-        b1,b2=st.columns(2)
+        with st.expander(title):
 
-        if b1.button("✏ Upravit",key="e"+str(i),use_container_width=True):
-            st.session_state.edit=i
-            st.rerun()
+            mult=st.slider("Porce",1,20,r["portions"],key=i)
 
-        if b2.button("🗑 Smazat",key="d"+str(i),use_container_width=True):
-            st.session_state.recipes.pop(i)
-            save_online(st.session_state.recipes)
-            st.rerun()
+            st.markdown("**Kategorie:** "+(r.get("category") or "—"))
 
-# ================= EDIT =================
-if "edit" in st.session_state:
+            st.markdown("**Ingredience**")
+            for line in r["ingredients"].splitlines():
+                m=re.search(r'(\d+)',line)
+                if m:
+                    num=int(m.group(1))
+                    new=int(num*mult/r["portions"])
+                    line=line.replace(str(num),str(new),1)
+                st.write("•",line)
 
-    i=st.session_state.edit
-    r=st.session_state.recipes[i]
+            st.markdown("**Postup**")
+            st.write(r["steps"])
 
-    st.markdown("### Upravit recept")
+            c1,c2,c3=st.columns(3)
 
-    name=st.text_input("Název",r["name"])
-    typ=st.radio("Typ",["sladké","slané"],index=0 if r["type"]=="sladké" else 1,horizontal=True)
-    portions=st.number_input("Porce",1,50,r.get("portions",1))
-    ing=st.text_area("Ingredience",r["ingredients"])
-    steps=st.text_area("Postup",r["steps"])
+            with c1:
+                if st.button("⭐",key="fav"+str(i)):
+                    r["fav"]=not r.get("fav",False)
+                    save(); st.rerun()
 
-    if st.button("Uložit změny",use_container_width=True):
+            with c2:
+                if st.button("🗑",key="del"+str(i)):
+                    st.session_state.recipes.pop(i)
+                    save(); st.rerun()
 
-        ing=convert_units(ing)
+            with c3:
+                if st.button("☁️",key="sync"+str(i)):
+                    try:
+                        requests.post("TVŮJ_SHEET_ENDPOINT",json=r)
+                        st.success("Sync OK")
+                    except:
+                        st.error("Sheet nepřipojen")
 
-        st.session_state.recipes[i]={
-            "name":name,
-            "type":typ,
-            "ingredients":ing,
-            "steps":steps,
-            "portions":portions
-        }
-
-        save_online(st.session_state.recipes)
-        del st.session_state.edit
-        st.rerun()
+# ---------- BOTTOM NAV ----------
+st.markdown('<div class="bottom">',unsafe_allow_html=True)
+c1,c2=st.columns(2)
+with c1:
+    if st.button("➕"):
+        st.session_state.page="add"; st.rerun()
+with c2:
+    if st.button("📋"):
+        st.session_state.page="list"; st.rerun()
+st.markdown('</div>',unsafe_allow_html=True)
