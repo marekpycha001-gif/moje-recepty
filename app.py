@@ -2,13 +2,6 @@ import streamlit as st
 import json, os, requests, re
 from fractions import Fraction
 
-# Gemini
-try:
-    import google.generativeai as genai
-    GEMINI_AVAILABLE = True
-except ImportError:
-    GEMINI_AVAILABLE = False
-
 st.set_page_config(page_title="Márova kuchařka", page_icon="🍳", layout="centered")
 
 # ---------- CONFIG ----------
@@ -17,7 +10,7 @@ LOCAL_FILE = "recipes.json"
 CACHE_FILE = "conversion_cache.json"
 
 # ---------- SESSION ----------
-defaults = {"recipes": [], "show_new": False, "show_search": False, "edit_index": None, "api": ""}
+defaults = {"recipes": [], "show_new": False, "show_search": False, "edit_index": None}
 for k, v in defaults.items():
     if k not in st.session_state:
         st.session_state[k] = v
@@ -97,11 +90,10 @@ body,[data-testid="stAppViewContainer"]{background:radial-gradient(circle at bot
 """,unsafe_allow_html=True)
 
 # ---------- TOP BAR ----------
-col1, col2, col3, col4 = st.columns([1,1,2,1])
+col1, col2, col3 = st.columns([1,1,2])
 with col1: st.button("➕", on_click=lambda: st.session_state.update({"show_new": not st.session_state.show_new}))
 with col2: st.button("🔍", on_click=lambda: st.session_state.update({"show_search": not st.session_state.show_search}))
-with col3: st.text_input("API klíč Gemini (pouze pro převod jednotek)", type="password", key="api")
-with col4: st.button("☁️ Sync", on_click=save_db)
+with col3: st.button("☁️ Sync", on_click=save_db)
 
 st.markdown('<div class="title">Márova kuchařka</div>',unsafe_allow_html=True)
 
@@ -111,49 +103,35 @@ if st.session_state.show_search:
     search = st.text_input("Hledat recept podle názvu/ingrediencí")
 
 # ---------- UNIT CONVERSION ----------
-def local_convert(ingredient_line):
-    """Fallback převod jednotek s podporou zlomků"""
-    pattern = r"([\d\s\/.,]+)\s*(ml|l|lžíce|lžička|hrnek|cup)?\s*(.+)"
-    m = re.match(pattern, ingredient_line.strip(), re.IGNORECASE)
+unit_map = {
+    "ml":1, "l":1000,
+    "lžíce":15, "lžic":15,
+    "lžička":5, "lžiček":5,
+    "hrnek":120, "hrnků":120,
+    "cup":120, "cups":120
+}
+
+def convert_line(line):
+    line = line.strip()
+    pattern = r"([\d\s\/,.]+)\s*([^\d\s]+)?\s*(.+)"
+    m = re.match(pattern, line)
     if not m:
-        return ingredient_line
+        return line
     qty, unit, name = m.groups()
     name_clean = re.sub(r"[^\w\s]", "", name.lower().strip())
-    # převod množství včetně zlomků
     try:
         qty = sum(Fraction(x) for x in qty.replace(",", ".").split())
     except:
         qty = 0
-    # koeficient
     coef = conversion_cache.get(name_clean,1)
     if unit:
-        unit = unit.lower()
-        if unit=="ml": coef = 1
-        elif unit=="l": coef = 1000
-        elif unit in ["lžíce","tablespoon"]: coef = 15
-        elif unit in ["lžička","teaspoon"]: coef = 5
-        elif unit in ["hrnek","cup"]: coef = 120
+        coef = unit_map.get(unit.lower(), coef)
     grams = round(float(qty)*coef)
     conversion_cache[name_clean] = coef
     return f"{grams} g {name.strip()}"
 
-def convert_text(full_text):
-    lines = full_text.splitlines()
-    converted_lines = [local_convert(l) for l in lines if l.strip()]
-    return "\n".join(converted_lines)
-
-def ai_convert_units(full_text):
-    if st.session_state.api and GEMINI_AVAILABLE:
-        try:
-            genai.configure(api_key=st.session_state.api)
-            prompt = f"Convert all units in this text to grams/ml and fix typos:\n{full_text}"
-            model = genai.GenerativeModel("models/text-bison-001")
-            result = model.generate_content([prompt]).text
-            return result.strip()
-        except:
-            return convert_text(full_text)
-    else:
-        return convert_text(full_text)
+def convert_text(text):
+    return "\n".join([convert_line(l) for l in text.splitlines() if l.strip()])
 
 # ---------- NEW RECIPE ----------
 if st.session_state.show_new:
@@ -164,30 +142,25 @@ if st.session_state.show_new:
     ingredients=st.text_area("Ingredience (každá na nový řádek)")
     steps=st.text_area("Postup")
     def save_new_recipe():
-        full_text = f"{ingredients}\n{steps}"
-        converted = ai_convert_units(full_text)
-        lines = converted.splitlines()
-        n = len(ingredients.splitlines())
-        ing = "\n".join(lines[:n])
-        stp = "\n".join(lines[n:])
+        conv_ing = convert_text(ingredients)
+        conv_steps = convert_text(steps)
         st.session_state.recipes.insert(0,{
             "name": name or "Bez názvu",
             "type": typ,
             "portions": portions,
-            "ingredients": ing,
-            "steps": stp,
+            "ingredients": conv_ing,
+            "steps": conv_steps,
             "fav": False
         })
         save_db()
+        st.session_state.show_new = False
     st.button("Uložit recept", on_click=save_new_recipe)
 
 # ---------- DISPLAY RECIPES ----------
 for i,r in enumerate(st.session_state.recipes):
-    title_prefix = "⭐ " if r.get("fav") else ""
-    title = title_prefix + r["name"]
     if search and search.lower() not in (r["name"]+r["ingredients"]).lower():
         continue
-    with st.expander(title):
+    with st.expander("⭐ "+r["name"] if r.get("fav") else r["name"]):
         st.markdown("### Ingredience")
         for line in r["ingredients"].splitlines(): st.write("•", line)
         st.markdown("### Postup")
@@ -207,18 +180,12 @@ if st.session_state.edit_index is not None:
     edit_ingredients = st.text_area("Ingredience", r["ingredients"])
     edit_steps = st.text_area("Postup", r["steps"])
     if st.button("💾 Uložit změny"):
-        full_text = f"{edit_ingredients}\n{edit_steps}"
-        converted = ai_convert_units(full_text)
-        lines = converted.splitlines()
-        n = len(edit_ingredients.splitlines())
-        ing = "\n".join(lines[:n])
-        stp = "\n".join(lines[n:])
         r.update({
             "name": edit_name,
             "type": edit_type,
             "portions": edit_portions,
-            "ingredients": ing,
-            "steps": stp
+            "ingredients": convert_text(edit_ingredients),
+            "steps": convert_text(edit_steps)
         })
         save_db()
         st.session_state.edit_index = None
