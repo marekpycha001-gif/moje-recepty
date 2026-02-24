@@ -36,8 +36,6 @@ def load_db():
             x["id"]=new_id()
         if "category" not in x:
             x["category"]=["slané"]
-        if "color" not in x:
-            x["color"]="#1E3A8A"
     return data
 
 def save_db():
@@ -69,17 +67,14 @@ position:sticky;
 top:0;
 z-index:999;
 background:#000428;
-padding:4px;
+padding:6px;
 display:flex;
-gap:4px;
-flex-wrap:wrap;
+gap:10px;
 }
 
 .topbar button{
-height:36px;
+height:38px;
 font-size:18px;
-flex:1 1 auto;
-min-width:40px;
 }
 
 .stExpanderHeader{
@@ -111,14 +106,19 @@ def text_color(bg_hex):
 
 # ---------- TOP BAR ----------
 st.markdown('<div class="topbar">',unsafe_allow_html=True)
+
 b1,b2 = st.columns([1,1])
+
 with b1:
     st.button("➕",use_container_width=True,
               on_click=lambda:st.session_state.update({"show_new":not st.session_state.show_new}))
+
 with b2:
     st.button("🔍",use_container_width=True,
               on_click=lambda:st.session_state.update({"show_search":not st.session_state.show_search}))
+
 st.markdown("</div>",unsafe_allow_html=True)
+
 st.markdown('<div class="title">Márova kuchařka</div>',unsafe_allow_html=True)
 
 # ---------- SEARCH ----------
@@ -131,6 +131,7 @@ all_cats=set()
 for r in st.session_state.recipes:
     all_cats.update(r.get("category",[]))
 all_cats=sorted(all_cats)
+
 selected_cat = st.selectbox("Kategorie",["Vše"]+all_cats)
 
 # ---------- CONVERSIONS ----------
@@ -173,6 +174,7 @@ if st.session_state.show_new:
 
     selected_cats_new = st.multiselect("Kategorie",all_cats)
     new_cat_new = st.text_input("Nová kategorie")
+
     color = st.color_picker("Barva kategorie","#4ECDC4")
 
     def save_new():
@@ -198,6 +200,7 @@ if st.session_state.show_new:
 
 # ---------- FILTER ----------
 recipes_sorted=sorted(st.session_state.recipes,key=lambda x:(not x.get("fav",False),x["name"]))
+
 recipes_filtered=[]
 terms=search.lower().split()
 for r in recipes_sorted:
@@ -210,17 +213,19 @@ for r in recipes_sorted:
 
 # ---------- DISPLAY ----------
 for r in recipes_filtered:
+
     color=r.get("color","#1E3A8A")
     tcolor=text_color(color)
     title=("⭐ "+r["name"]) if r.get("fav") else r["name"]
 
     st.markdown(f"""
     <div style="background:{color};color:{tcolor};padding:6px;border-radius:8px;font-weight:bold;">
-    {r['name']}
+    {title}
     </div>
     """,unsafe_allow_html=True)
 
     with st.expander("Otevřít recept"):
+
         if st.session_state.edit_id==r["id"]:
             en=st.text_input("Název",r["name"])
             ep=st.number_input("Porce",1,20,r["portions"])
@@ -248,7 +253,7 @@ for r in recipes_filtered:
             for l in r["steps"].splitlines():
                 st.markdown(f"<p>{l}</p>",unsafe_allow_html=True)
 
-            c1,c2,c3=st.columns([1,1,1])
+            c1,c2,c3=st.columns(3)
             c1.button("⭐",key=r["id"]+"f",on_click=lambda r=r:[r.update({"fav":not r["fav"]}),save_db()])
             c2.button("✏️",key=r["id"]+"e",on_click=lambda r=r:st.session_state.update({"edit_id":r["id"]}))
             c3.button("🗑",key=r["id"]+"d",on_click=lambda r=r:[st.session_state.recipes.remove(r),save_db()])
