@@ -21,7 +21,7 @@ def safe_save_json(path,data):
         json.dump(data,f,ensure_ascii=False,indent=2)
 
 # ---------- SESSION ----------
-defaults = {"recipes": [], "show_new": False, "show_search": False, "edit_id": None}
+defaults = {"recipes": [], "show_new": False, "show_search": False, "edit_id": None, "category_colors": {}}
 for k,v in defaults.items():
     if k not in st.session_state:
         st.session_state[k]=v
@@ -39,6 +39,10 @@ def load_db():
             x["id"]=new_id()
         if "category" not in x:
             x["category"]=["slané"] if x.get("type","slané")=="slané" else ["sladké"]
+        # ensure colors
+        for cat in x.get("category",[]):
+            if cat not in st.session_state.category_colors:
+                st.session_state.category_colors[cat] = "#4ECDC4"
     return data
 
 def save_db():
@@ -88,7 +92,6 @@ p{margin:0px !important; padding:0px !important; line-height:1.2 !important;}
 """,unsafe_allow_html=True)
 
 # ---------- COLOR HELPERS ----------
-colors = ["#FF6B6B","#4ECDC4","#FFD93D","#6A4C93","#1A535C","#FF8C42","#1982C4"]
 def text_color(bg_hex):
     bg_hex = bg_hex.lstrip("#")
     r,g,b = int(bg_hex[0:2],16), int(bg_hex[2:4],16), int(bg_hex[4:6],16)
@@ -164,6 +167,13 @@ if st.session_state.show_new:
     selected_cats_new = st.multiselect("Vyber existující kategorie", all_cats)
     new_cat_new = st.text_input("Nová kategorie (volitelně)")
 
+    # výběr barvy pro každou kategorii
+    for cat in selected_cats_new + ([new_cat_new] if new_cat_new.strip() else []):
+        if cat not in st.session_state.category_colors:
+            st.session_state.category_colors[cat] = "#4ECDC4"
+        color = st.color_picker(f"Barva pro kategorii '{cat}'", st.session_state.category_colors[cat])
+        st.session_state.category_colors[cat] = color
+
     def save_new():
         cats = selected_cats_new.copy()
         if new_cat_new.strip():
@@ -199,8 +209,12 @@ for r in recipes_sorted:
 
 # ---------- DISPLAY ----------
 for r in recipes_filtered:
-    title=("⭐ "+r["name"]) if r.get("fav") else r["name"]
-    with st.expander(title):
+    main_cat = r.get("category",[None])[0]
+    bg_color = st.session_state.category_colors.get(main_cat,"#1E3A8A")
+    txt_color = text_color(bg_color)
+    title_html = f'<div style="background-color:{bg_color};color:{txt_color};padding:6px;border-radius:8px;margin-bottom:2px;">{r["name"]}</div>'
+
+    with st.expander(title_html, unsafe_allow_html=True):
         # EDIT MODE
         if st.session_state.edit_id==r["id"]:
             en=st.text_input("Název",r["name"])
@@ -211,6 +225,13 @@ for r in recipes_filtered:
             # edit kategorií
             selected_cats_edit = st.multiselect("Vyber existující kategorie", all_cats, default=r.get("category",[]))
             new_cat_edit = st.text_input("Nová kategorie (volitelně)")
+
+            # barvy pro kategorie
+            for cat in selected_cats_edit + ([new_cat_edit] if new_cat_edit.strip() else []):
+                if cat not in st.session_state.category_colors:
+                    st.session_state.category_colors[cat] = "#4ECDC4"
+                color = st.color_picker(f"Barva pro kategorii '{cat}'", st.session_state.category_colors[cat])
+                st.session_state.category_colors[cat] = color
 
             def save_edit(r=r):
                 cats = selected_cats_edit.copy()
@@ -225,7 +246,7 @@ for r in recipes_filtered:
         else:
             # DISPLAY CATEGORY TAGS
             for i, cat in enumerate(r.get("category",[])):
-                color = colors[i % len(colors)]
+                color = st.session_state.category_colors.get(cat,"#4ECDC4")
                 tcolor = text_color(color)
                 st.markdown(f'<span style="background-color:{color};color:{tcolor};padding:2px 6px;border-radius:5px;margin-right:2px;">{cat}</span>', unsafe_allow_html=True)
             
