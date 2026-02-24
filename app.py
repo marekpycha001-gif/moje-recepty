@@ -48,7 +48,6 @@ def load_db():
     if not data:
         data=safe_load_json(LOCAL_FILE,[])
 
-    # důležité: přidá ID starým receptům
     for x in data:
         if "id" not in x:
             x["id"]=new_id()
@@ -59,7 +58,6 @@ def save_db():
     safe_save_json(LOCAL_FILE,st.session_state.recipes)
     safe_save_json(CACHE_FILE,conversion_cache)
 
-# initial load
 if not st.session_state.recipes:
     st.session_state.recipes=load_db()
 
@@ -92,7 +90,7 @@ margin-bottom:2px;
 background:#cce0ff !important;
 color:black !important;
 border-radius:10px;
-padding:6px !important;
+padding:4px !important;
 }
 
 p{margin:2px !important;}
@@ -103,13 +101,11 @@ p{margin:2px !important;}
 
 # ---------- TOP BAR ----------
 st.markdown('<div class="topbar">',unsafe_allow_html=True)
-c1,c2,c3=st.columns([1,1,2])
+c1,c2=st.columns([1,1])
 with c1:
     st.button("➕",on_click=lambda:st.session_state.update({"show_new":not st.session_state.show_new}))
 with c2:
     st.button("🔍",on_click=lambda:st.session_state.update({"show_search":not st.session_state.show_search}))
-with c3:
-    st.button("💾 Uložit",on_click=save_db)
 st.markdown("</div>",unsafe_allow_html=True)
 
 st.markdown('<div class="title">Márova kuchařka</div>',unsafe_allow_html=True)
@@ -146,6 +142,11 @@ def convert_line(line):
 def convert_text(t):
     return "\n".join(convert_line(l) for l in t.splitlines() if l.strip())
 
+# ---------- SPLIT INGREDIENTS ----------
+def split_ingredients(text):
+    parts=re.split(r',| a ', text)
+    return "\n".join(p.strip() for p in parts if p.strip())
+
 # ---------- NEW ----------
 if st.session_state.show_new:
     st.markdown("### Nový recept")
@@ -156,12 +157,13 @@ if st.session_state.show_new:
     steps=st.text_area("Postup")
 
     def save_new():
+        ing_split=split_ingredients(ing)
         st.session_state.recipes.insert(0,{
             "id":new_id(),
             "name":n or "Bez názvu",
             "type":typ,
             "portions":por,
-            "ingredients":convert_text(ing),
+            "ingredients":convert_text(ing_split),
             "steps":steps,
             "fav":False
         })
@@ -192,7 +194,8 @@ for r in recipes_sorted:
             es=st.text_area("Postup",r["steps"])
 
             def save_edit(r=r):
-                r.update({"name":en,"type":et,"portions":ep,"ingredients":convert_text(ei),"steps":es})
+                ei_split=split_ingredients(ei)
+                r.update({"name":en,"type":et,"portions":ep,"ingredients":convert_text(ei_split),"steps":es})
                 st.session_state.edit_id=None
                 save_db()
 
@@ -201,14 +204,13 @@ for r in recipes_sorted:
         else:
             st.markdown("**Ingredience**")
             for l in r["ingredients"].splitlines():
-                st.markdown("• "+l)
+                st.write("• "+l)
 
             st.markdown("**Postup**")
             for l in r["steps"].splitlines():
-                st.markdown(l)
+                st.write(l)
 
             c1,c2,c3=st.columns(3)
-
             c1.button("⭐",key=r["id"]+"f",on_click=lambda r=r:[r.update({"fav":not r["fav"]}),save_db()])
             c2.button("✏️",key=r["id"]+"e",on_click=lambda r=r:st.session_state.update({"edit_id":r["id"]}))
             c3.button("🗑",key=r["id"]+"d",on_click=lambda r=r:[st.session_state.recipes.remove(r),save_db()])
