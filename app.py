@@ -150,7 +150,6 @@ if st.session_state.show_new:
     selected_cats_new = st.multiselect("Kategorie", all_cats)
     new_cat_new = st.text_input("Nová kategorie")
 
-    # výběr barev
     for cat in selected_cats_new + ([new_cat_new] if new_cat_new.strip() else []):
         if cat not in st.session_state.category_colors:
             st.session_state.category_colors[cat]="#4ECDC4"
@@ -200,18 +199,22 @@ for r in recipes_filtered:
     bg=st.session_state.category_colors.get(main_cat,"#1E3A8A")
     txt=text_color(bg)
 
-    title_html=f"""
-    <div style="
-    background:{bg};
-    color:{txt};
-    padding:6px;
-    border-radius:8px;
-    font-weight:bold;">
-    {'⭐ ' if r.get("fav") else ''}{r["name"]}
-    </div>
-    """
+    title = ("⭐ " if r.get("fav") else "") + r["name"]
 
-    with st.expander(title_html,expanded=False):
+    with st.expander(title,expanded=False):
+
+        # barevný pruh uvnitř
+        st.markdown(f"""
+        <div style="
+        background:{bg};
+        color:{txt};
+        padding:6px;
+        border-radius:8px;
+        font-weight:bold;
+        margin-bottom:6px;">
+        {r["name"]}
+        </div>
+        """, unsafe_allow_html=True)
 
         if st.session_state.edit_id==r["id"]:
             en=st.text_input("Název",r["name"])
@@ -248,7 +251,6 @@ for r in recipes_filtered:
             st.button("💾 Uložit změny",on_click=save_edit)
 
         else:
-            # štítky kategorií
             for cat in r.get("category",[]):
                 col=st.session_state.category_colors.get(cat,"#4ECDC4")
                 t=text_color(col)
