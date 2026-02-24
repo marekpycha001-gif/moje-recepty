@@ -40,12 +40,20 @@ def load_db():
         r=requests.get(SDB_URL,timeout=3)
         if r.status_code==200:
             data=r.json()
-            for x in data:
-                x.setdefault("id",new_id())
-            return data
+        else:
+            data=[]
     except:
-        pass
-    return safe_load_json(LOCAL_FILE,[])
+        data=[]
+
+    if not data:
+        data=safe_load_json(LOCAL_FILE,[])
+
+    # důležité: přidá ID starým receptům
+    for x in data:
+        if "id" not in x:
+            x["id"]=new_id()
+
+    return data
 
 def save_db():
     safe_save_json(LOCAL_FILE,st.session_state.recipes)
@@ -88,25 +96,8 @@ padding:6px !important;
 }
 
 p{margin:2px !important;}
-div[data-testid="stMarkdownContainer"] p{
-margin:2px !important;
-}
-
-.block-container{
-padding-top:1rem;
-}
-
-.topbar{
-position:sticky;
-top:0;
-z-index:999;
-background:#000428;
-padding-bottom:6px;
-}
-
-button[kind="secondary"]{
-padding:3px 8px;
-}
+.block-container{padding-top:1rem;}
+.topbar{position:sticky;top:0;z-index:999;background:#000428;padding-bottom:6px;}
 </style>
 """,unsafe_allow_html=True)
 
@@ -129,22 +120,12 @@ if st.session_state.show_search:
     search=st.text_input("Hledat")
 
 # ---------- CONVERSION ----------
-unit_map={
-"ml":1,"l":1000,
-"g":1,"kg":1000,
-"lžíce":15,"lžička":5,
-"hrnek":240,"cup":240
-}
-
-density={
-"voda":1,"mléko":1.03,"olej":0.92,"med":1.42
-}
-
+unit_map={"ml":1,"l":1000,"g":1,"kg":1000,"lžíce":15,"lžička":5,"hrnek":240,"cup":240}
+density={"voda":1,"mléko":1.03,"olej":0.92,"med":1.42}
 ignore_units=["ks","kus","vejce","špetka","trochu"]
 
 def parse_qty(q):
-    try:
-        return float(sum(Fraction(x) for x in q.replace(",",".").split()))
+    try:return float(sum(Fraction(x) for x in q.replace(",",".").split()))
     except:
         try:return float(q)
         except:return None
@@ -153,30 +134,14 @@ def convert_line(line):
     line=line.strip()
     m=re.match(r"([\d\/\.,\s]+)\s*([^\d\s]+)?\s*(.*)",line)
     if not m:return line
-
     qty,unit,name=m.groups()
-    name=name.strip()
-    if not qty:return line
-
     val=parse_qty(qty)
     if val is None:return line
-
-    if unit and unit.lower() in ignore_units:
-        return line
-
-    coef=1
-    if unit:
-        coef=unit_map.get(unit.lower(),1)
-
-    coef*=density.get(name.lower(),1)
-
-    g=round(val*coef)
-    conversion_cache[name.lower()]=coef
-
-    if coef==1 and (not unit or unit.lower() not in unit_map):
-        return line
-
-    return f"{g} g {name}"
+    if unit and unit.lower() in ignore_units:return line
+    coef=unit_map.get((unit or "").lower(),1)
+    coef*=density.get(name.lower().strip(),1)
+    if coef==1:return line
+    return f"{round(val*coef)} g {name.strip()}"
 
 def convert_text(t):
     return "\n".join(convert_line(l) for l in t.splitlines() if l.strip())
@@ -206,10 +171,7 @@ if st.session_state.show_new:
     st.button("Uložit",on_click=save_new)
 
 # ---------- SORT ----------
-recipes_sorted = sorted(
-    st.session_state.recipes,
-    key=lambda x:(not x.get("fav",False),x["name"])
-)
+recipes_sorted=sorted(st.session_state.recipes,key=lambda x:(not x.get("fav",False),x["name"]))
 
 # ---------- DISPLAY ----------
 for r in recipes_sorted:
@@ -222,7 +184,6 @@ for r in recipes_sorted:
 
     with st.expander(title):
 
-        # EDIT MODE
         if st.session_state.edit_id==r["id"]:
             en=st.text_input("Název",r["name"])
             et=st.radio("Typ",["sladké","slané"],index=0 if r["type"]=="sladké" else 1)
@@ -231,13 +192,7 @@ for r in recipes_sorted:
             es=st.text_area("Postup",r["steps"])
 
             def save_edit(r=r):
-                r.update({
-                    "name":en,
-                    "type":et,
-                    "portions":ep,
-                    "ingredients":convert_text(ei),
-                    "steps":es
-                })
+                r.update({"name":en,"type":et,"portions":ep,"ingredients":convert_text(ei),"steps":es})
                 st.session_state.edit_id=None
                 save_db()
 
@@ -254,16 +209,6 @@ for r in recipes_sorted:
 
             c1,c2,c3=st.columns(3)
 
-            c1.button("⭐",key=r["id"]+"f",on_click=lambda r=r:[
-                r.update({"fav":not r["fav"]}),
-                save_db()
-            ])
-
-            c2.button("✏️",key=r["id"]+"e",on_click=lambda r=r:
-                st.session_state.update({"edit_id":r["id"]})
-            )
-
-            c3.button("🗑",key=r["id"]+"d",on_click=lambda r=r:[
-                st.session_state.recipes.remove(r),
-                save_db()
-            ])
+            c1.button("⭐",key=r["id"]+"f",on_click=lambda r=r:[r.update({"fav":not r["fav"]}),save_db()])
+            c2.button("✏️",key=r["id"]+"e",on_click=lambda r=r:st.session_state.update({"edit_id":r["id"]}))
+            c3.button("🗑",key=r["id"]+"d",on_click=lambda r=r:[st.session_state.recipes.remove(r),save_db()])
