@@ -1,12 +1,8 @@
 import streamlit as st
-import json, os, requests, re, time, random, string
+import json, os, re, time, random, string
 from fractions import Fraction
 
 st.set_page_config(page_title="Márova kuchařka", page_icon="🍳", layout="centered")
-
-# ---------- CONFIG ----------
-LOCAL_FILE = "recipes.json"
-CACHE_FILE = "conversion_cache.json"
 
 # ---------- HELPERS ----------
 def new_id():
@@ -30,8 +26,10 @@ for k,v in defaults.items():
     if k not in st.session_state:
         st.session_state[k]=v
 
-# ---------- CACHE ----------
+CACHE_FILE = "conversion_cache.json"
 conversion_cache = safe_load_json(CACHE_FILE,{})
+
+LOCAL_FILE = "recipes.json"
 
 # ---------- LOAD DB ----------
 def load_db():
@@ -89,6 +87,14 @@ p{margin:0px !important; padding:0px !important; line-height:1.2 !important;}
 </style>
 """,unsafe_allow_html=True)
 
+# ---------- COLOR HELPERS ----------
+colors = ["#FF6B6B","#4ECDC4","#FFD93D","#6A4C93","#1A535C","#FF8C42","#1982C4"]
+def text_color(bg_hex):
+    bg_hex = bg_hex.lstrip("#")
+    r,g,b = int(bg_hex[0:2],16), int(bg_hex[2:4],16), int(bg_hex[4:6],16)
+    luminance = (0.299*r + 0.587*g + 0.114*b)/255
+    return "#000000" if luminance>0.5 else "#FFFFFF"
+
 # ---------- TOP BAR ----------
 st.markdown('<div class="topbar">',unsafe_allow_html=True)
 c1,c2,c3 = st.columns([1,1,2])
@@ -96,7 +102,6 @@ with c1:
     st.button("➕",on_click=lambda:st.session_state.update({"show_new":not st.session_state.show_new}))
 with c2:
     st.button("🔍",on_click=lambda:st.session_state.update({"show_search":not st.session_state.show_search}))
-# c3 zůstává prázdné pro zarovnání
 st.markdown("</div>",unsafe_allow_html=True)
 
 st.markdown('<div class="title">Márova kuchařka</div>',unsafe_allow_html=True)
@@ -106,11 +111,13 @@ search=""
 if st.session_state.show_search:
     search=st.text_input("Hledat")
 
-# ---------- CATEGORY FILTER ----------
+# ---------- ALL CATEGORIES ----------
 all_cats = set()
 for r in st.session_state.recipes:
-    all_cats.update(r.get("category",[]))
+    all_cats.update(r.get("category", []))
 all_cats = sorted(all_cats)
+
+# ---------- CATEGORY FILTER ----------
 selected_cat = st.selectbox("Kategorie", ["Vše"] + all_cats)
 
 # ---------- UNIT CONVERSION ----------
@@ -152,12 +159,17 @@ if st.session_state.show_new:
     por=st.number_input("Porce",1,20,4)
     ing=st.text_area("Ingredience")
     steps=st.text_area("Postup")
-    cat_input = st.text_input("Kategorie (nové odděluj čárkou)")
     
+    # vyber existujících kategorií + nová
+    selected_cats_new = st.multiselect("Vyber existující kategorie", all_cats)
+    new_cat_new = st.text_input("Nová kategorie (volitelně)")
+
     def save_new():
-        cats = [c.strip() for c in cat_input.split(",") if c.strip()]
+        cats = selected_cats_new.copy()
+        if new_cat_new.strip():
+            cats.append(new_cat_new.strip())
         if not cats:
-            cats = ["sladké"] if st.session_state.show_new else ["slané"]
+            cats = ["sladké"]
         ing_split=split_ingredients(ing)
         st.session_state.recipes.insert(0,{
             "id":new_id(),
@@ -170,7 +182,7 @@ if st.session_state.show_new:
         })
         save_db()
         st.session_state.show_new=False
-    
+
     st.button("Uložit",on_click=save_new)
 
 # ---------- FILTER + SEARCH ----------
@@ -180,7 +192,6 @@ search_terms = search.lower().split()
 for r in recipes_sorted:
     if selected_cat!="Vše" and selected_cat not in r.get("category",[]):
         continue
-    # hledání podle části slov
     text=(r["name"]+" "+r["ingredients"]).lower()
     if search_terms and not all(any(term in w for w in text.split()) for term in search_terms):
         continue
@@ -190,23 +201,34 @@ for r in recipes_sorted:
 for r in recipes_filtered:
     title=("⭐ "+r["name"]) if r.get("fav") else r["name"]
     with st.expander(title):
+        # EDIT MODE
         if st.session_state.edit_id==r["id"]:
             en=st.text_input("Název",r["name"])
             ep=st.number_input("Porce",1,20,r["portions"])
             ei=st.text_area("Ingredience",r["ingredients"])
             es=st.text_area("Postup",r["steps"])
-            ec=st.text_input("Kategorie (odděl čárkou)"," ,".join(r.get("category",[])))
+            
+            # edit kategorií
+            selected_cats_edit = st.multiselect("Vyber existující kategorie", all_cats, default=r.get("category",[]))
+            new_cat_edit = st.text_input("Nová kategorie (volitelně)")
 
             def save_edit(r=r):
-                cats = [c.strip() for c in ec.split(",") if c.strip()]
+                cats = selected_cats_edit.copy()
+                if new_cat_edit.strip():
+                    cats.append(new_cat_edit.strip())
                 ei_split=split_ingredients(ei)
                 r.update({"name":en,"portions":ep,"ingredients":convert_text(ei_split),"steps":es,"category":cats})
                 st.session_state.edit_id=None
                 save_db()
-            
+
             st.button("💾 Uložit změny",on_click=save_edit)
         else:
-            st.markdown("**Kategorie:** "+", ".join(r.get("category",[])))
+            # DISPLAY CATEGORY TAGS
+            for i, cat in enumerate(r.get("category",[])):
+                color = colors[i % len(colors)]
+                tcolor = text_color(color)
+                st.markdown(f'<span style="background-color:{color};color:{tcolor};padding:2px 6px;border-radius:5px;margin-right:2px;">{cat}</span>', unsafe_allow_html=True)
+            
             st.markdown("**Ingredience**")
             for l in r["ingredients"].splitlines():
                 st.markdown(f'<p style="margin:0px;padding:0px;">• {l}</p>',unsafe_allow_html=True)
@@ -214,6 +236,7 @@ for r in recipes_filtered:
             for l in r["steps"].splitlines():
                 st.markdown(f'<p style="margin:0px;padding:0px;">{l}</p>',unsafe_allow_html=True)
             
+            # ACTION BUTTONS
             c1,c2,c3=st.columns(3)
             c1.button("⭐",key=r["id"]+"f",on_click=lambda r=r:[r.update({"fav":not r["fav"]}),save_db()])
             c2.button("✏️",key=r["id"]+"e",on_click=lambda r=r:st.session_state.update({"edit_id":r["id"]}))
