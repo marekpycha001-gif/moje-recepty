@@ -26,7 +26,7 @@ def safe_save_json(path,data):
         json.dump(data,f,ensure_ascii=False,indent=2)
 
 # ---------- SESSION ----------
-defaults = {"recipes": [], "show_new": False, "show_search": False, "edit_index": None}
+defaults = {"recipes": [], "show_new": False, "show_search": False, "edit_id": None}
 for k,v in defaults.items():
     if k not in st.session_state:
         st.session_state[k]=v
@@ -206,11 +206,13 @@ if st.session_state.show_new:
     st.button("Uložit",on_click=save_new)
 
 # ---------- SORT ----------
-recipes=st.session_state.recipes
-recipes=sorted(recipes,key=lambda x:(not x.get("fav",False),x["name"]))
+recipes_sorted = sorted(
+    st.session_state.recipes,
+    key=lambda x:(not x.get("fav",False),x["name"])
+)
 
 # ---------- DISPLAY ----------
-for i,r in enumerate(recipes):
+for r in recipes_sorted:
 
     text=(r["name"]+r["ingredients"]+r["type"]).lower()
     if search and search.lower() not in text:
@@ -221,14 +223,14 @@ for i,r in enumerate(recipes):
     with st.expander(title):
 
         # EDIT MODE
-        if st.session_state.edit_index==i:
-            en=st.text_input("Název",r["name"],key=f"n{i}")
-            et=st.radio("Typ",["sladké","slané"],index=0 if r["type"]=="sladké" else 1,key=f"t{i}")
-            ep=st.number_input("Porce",1,20,r["portions"],key=f"p{i}")
-            ei=st.text_area("Ingredience",r["ingredients"],key=f"i{i}")
-            es=st.text_area("Postup",r["steps"],key=f"s{i}")
+        if st.session_state.edit_id==r["id"]:
+            en=st.text_input("Název",r["name"])
+            et=st.radio("Typ",["sladké","slané"],index=0 if r["type"]=="sladké" else 1)
+            ep=st.number_input("Porce",1,20,r["portions"])
+            ei=st.text_area("Ingredience",r["ingredients"])
+            es=st.text_area("Postup",r["steps"])
 
-            def save_edit(i=i):
+            def save_edit(r=r):
                 r.update({
                     "name":en,
                     "type":et,
@@ -236,10 +238,10 @@ for i,r in enumerate(recipes):
                     "ingredients":convert_text(ei),
                     "steps":es
                 })
-                st.session_state.edit_index=None
+                st.session_state.edit_id=None
                 save_db()
 
-            st.button("💾 uložit",key=f"save{i}",on_click=save_edit)
+            st.button("💾 uložit",on_click=save_edit)
 
         else:
             st.markdown("**Ingredience**")
@@ -252,14 +254,16 @@ for i,r in enumerate(recipes):
 
             c1,c2,c3=st.columns(3)
 
-            c1.button("⭐",key=f"f{i}",on_click=lambda i=i:[
-                st.session_state.recipes[i].update({"fav":not st.session_state.recipes[i]["fav"]}),
+            c1.button("⭐",key=r["id"]+"f",on_click=lambda r=r:[
+                r.update({"fav":not r["fav"]}),
                 save_db()
             ])
 
-            c2.button("✏️",key=f"e{i}",on_click=lambda i=i:st.session_state.update({"edit_index":i}))
+            c2.button("✏️",key=r["id"]+"e",on_click=lambda r=r:
+                st.session_state.update({"edit_id":r["id"]})
+            )
 
-            c3.button("🗑",key=f"d{i}",on_click=lambda i=i:[
-                st.session_state.recipes.pop(i),
+            c3.button("🗑",key=r["id"]+"d",on_click=lambda r=r:[
+                st.session_state.recipes.remove(r),
                 save_db()
             ])
