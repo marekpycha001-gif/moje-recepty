@@ -3,79 +3,105 @@ import uuid
 
 st.set_page_config(page_title="Moje recepty", layout="centered")
 
-# ====== CSS – menší řádkování ======
+# ---------- STYL ----------
 st.markdown("""
 <style>
-.ingredience p {
-    margin: 0px;
-    line-height: 1.05;
+.card{
+    background:#1e1e1e;
+    padding:18px;
+    border-radius:14px;
+    margin-bottom:14px;
+    border:1px solid #333;
 }
-.nazev {
-    margin-bottom: 5px;
+.title{
+    font-size:22px;
+    font-weight:700;
+    margin-bottom:6px;
 }
-.postup {
-    margin-top: 5px;
+.ing p{
+    margin:0;
+    line-height:1.05;
+}
+.tag{
+    display:inline-block;
+    padding:2px 8px;
+    border-radius:8px;
+    font-size:12px;
+    margin-right:6px;
+    color:white;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# ====== Inicializace session ======
+# ---------- DATA ----------
+DEFAULT_TAGS = {
+    "dezert": "#e74c3c",
+    "oběd": "#3498db",
+    "Itálie": "#27ae60",
+    "Asie": "#9b59b6",
+    "slané pečivo": "#f39c12",
+    "chuťovky": "#1abc9c",
+    "jiné": "#7f8c8d"
+}
+
 if "recipes" not in st.session_state:
     st.session_state.recipes = []
 
-# ====== Přidání receptu ======
-def add_recipe():
-    st.subheader("➕ Přidat nový recept")
+if "tags" not in st.session_state:
+    st.session_state.tags = DEFAULT_TAGS.copy()
 
-    with st.form("new_recipe_form"):
-        name = st.text_input("Název receptu")
-        ingredients = st.text_area("Ingredience (každá na nový řádek)")
-        procedure = st.text_area("Postup")
+# ---------- FORM ----------
+st.title("📖 Moje recepty")
 
-        submitted = st.form_submit_button("Uložit recept")
+with st.expander("➕ Přidat recept", expanded=False):
+    with st.form("add"):
+        name = st.text_input("Název")
+        ing = st.text_area("Ingredience (po řádcích)")
+        proc = st.text_area("Postup")
 
-        if submitted and name:
-            new_recipe = {
+        tag = st.selectbox("Štítek", list(st.session_state.tags.keys()))
+
+        new_tag = st.text_input("Nový štítek (volitelné)")
+        color = st.color_picker("Barva nového štítku", "#ff0000")
+
+        ok = st.form_submit_button("Uložit")
+
+        if ok and name:
+            if new_tag:
+                st.session_state.tags[new_tag] = color
+                tag = new_tag
+
+            st.session_state.recipes.append({
                 "id": str(uuid.uuid4()),
                 "name": name,
-                "ingredients": ingredients,
-                "procedure": procedure
-            }
-            st.session_state.recipes.append(new_recipe)
-            st.success("Recept uložen ✅")
+                "ing": ing,
+                "proc": proc,
+                "tag": tag
+            })
 
-# ====== Zobrazení receptů ======
-def show_recipes():
-    st.subheader("📖 Moje recepty")
+            st.success("Uloženo")
+            st.rerun()
 
-    for r in st.session_state.recipes:
-        with st.expander(r["name"], expanded=False):
+# ---------- VÝPIS ----------
+for r in st.session_state.recipes:
 
-            st.markdown(f"<h4 class='nazev'>{r['name']}</h4>", unsafe_allow_html=True)
+    tag_color = st.session_state.tags.get(r["tag"], "#666")
 
-            st.markdown("**Ingredience:**")
-            st.markdown(
-                f"<div class='ingredience'>{r['ingredients'].replace(chr(10), '<br>')}</div>",
-                unsafe_allow_html=True
-            )
+    st.markdown(f"""
+    <div class="card">
+        <div class="title">{r["name"]}</div>
+        <span class="tag" style="background:{tag_color}">{r["tag"]}</span>
+        <br><br>
+        <b>Ingredience:</b>
+        <div class="ing">{r["ing"].replace(chr(10), "<br>")}</div>
+        <br>
+        <b>Postup:</b><br>
+        {r["proc"]}
+    </div>
+    """, unsafe_allow_html=True)
 
-            st.markdown("<div class='postup'></div>", unsafe_allow_html=True)
-            st.markdown("**Postup:**")
-            st.write(r["procedure"])
-
-            if st.button("❌ Smazat", key=r["id"]):
-                st.session_state.recipes = [
-                    recipe for recipe in st.session_state.recipes
-                    if recipe["id"] != r["id"]
-                ]
-                st.success("Recept smazán")
-                st.rerun()
-
-# ====== Hlavní část aplikace ======
-st.title("🍲 Moje recepty")
-
-add_recipe()
-
-st.divider()
-
-show_recipes()
+    if st.button("Smazat", key=r["id"]):
+        st.session_state.recipes = [
+            x for x in st.session_state.recipes if x["id"] != r["id"]
+        ]
+        st.rerun()
