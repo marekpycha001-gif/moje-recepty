@@ -1,7 +1,6 @@
 import streamlit as st
 import json, os, re, time, random, string
 from fractions import Fraction
-from streamlit_sortable import sortable_container, sortable_item  # drag-and-drop
 
 # ---------- PAGE ----------
 st.set_page_config(page_title="Márova kuchařka", page_icon="🍳", layout="centered")
@@ -31,7 +30,7 @@ defaults = {
     "show_new": False,
     "show_search": False,
     "edit_id": None,
-    "tags": {}  # globální štítky
+    "tags": {}
 }
 for k,v in defaults.items():
     if k not in st.session_state:
@@ -62,10 +61,12 @@ def save_db():
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&display=swap');
+
 body,[data-testid="stAppViewContainer"]{
 background:radial-gradient(circle at bottom,#000428,#004e92);
 color:white;
 }
+
 .title{
 font-family:'Dancing Script',cursive;
 font-size:28px;
@@ -73,6 +74,7 @@ text-align:center;
 color:#00ccff;
 margin-bottom:10px;
 }
+
 .topbar{
 position:sticky;
 top:0;
@@ -80,6 +82,7 @@ z-index:999;
 background:#000428;
 padding-bottom:6px;
 }
+
 .block-container{padding-top:1rem;}
 </style>
 """,unsafe_allow_html=True)
@@ -90,6 +93,7 @@ c1,c2,c3=st.columns([1,1,2])
 c1.button("➕",on_click=lambda:st.session_state.update({"show_new":not st.session_state.show_new}))
 c2.button("🔍",on_click=lambda:st.session_state.update({"show_search":not st.session_state.show_search}))
 st.markdown("</div>",unsafe_allow_html=True)
+
 st.markdown('<div class="title">Márova kuchařka</div>',unsafe_allow_html=True)
 
 # ---------- SEARCH ----------
@@ -122,7 +126,7 @@ def normalize_unit(u):
     if not u: return u
     u=u.lower()
     variants={
-        "hrnky":"hrnek","hrnku":"hrnek","hrncích":"hrnek",
+        "hrnky":"hrnek","hrnku":"hrnek",
         "lžičky":"lžička","lžiček":"lžička",
         "lžíce":"lžíce","lžící":"lžíce"
     }
@@ -152,12 +156,16 @@ def convert_line(line,scale):
     if val is None: return line
     val*=scale
     unit=normalize_unit(unit)
+
     if unit_mode=="Původní": return f"{clean(val)} {unit or ''} {name}".strip()
     if unit in ignore_units: return f"{clean(val)} {unit or ''} {name}".strip()
+
     coef=unit_map.get(unit)
     if not coef: return f"{clean(val)} {unit or ''} {name}".strip()
+
     ml=val*coef
     if unit_mode=="Mililitry": return f"{clean(ml)} ml {name}"
+
     g=ml*find_density(name)
     return f"{clean(g)} g {name}"
 
@@ -169,8 +177,9 @@ def split_ingredients(text):
     parts=re.split(r'(?<!\d),(?!\d)|\s+a\s+', text)
     return "\n".join(p.strip() for p in parts if p.strip())
 
-# ---------- RECIPE FORM ----------
+# ---------- FORM ----------
 def recipe_form(r=None):
+
     if r:
         st.subheader("Upravit recept")
         n=r["name"]
@@ -191,14 +200,12 @@ def recipe_form(r=None):
     ing=st.text_area("Ingredience",ing)
     steps=st.text_area("Postup",steps)
 
-    # multi-select štítky
     tag_names=list(st.session_state.tags.keys())
     selected_tags=st.multiselect("Štítky",tag_names,default=selected_tags)
 
-    # přidání nového štítku
     with st.expander("Přidat nový štítek"):
         new_tag_name=st.text_input("Název štítku")
-        new_tag_color=st.color_picker("Barva štítku","#AAAAAA")
+        new_tag_color=st.color_picker("Barva","#AAAAAA")
         if st.button("Přidat štítek"):
             if new_tag_name and new_tag_name not in st.session_state.tags:
                 st.session_state.tags[new_tag_name]=new_tag_color
@@ -214,58 +221,53 @@ def recipe_form(r=None):
             "steps": steps,
             "tags": selected_tags
         }
+
         if r:
-            # update
             idx=[i for i,x in enumerate(st.session_state.recipes) if x["id"]==r["id"]][0]
             st.session_state.recipes[idx]=data
         else:
             st.session_state.recipes.insert(0,data)
+
         save_db()
         st.session_state.edit_id=None
         st.rerun()
 
-# ---------- SHOW RECIPES WITH DRAG & DROP ----------
-def show_recipes():
-    search_lower = search.lower() if search else ""
-    recipes = st.session_state.recipes
+# ---------- LIST ----------
+for r in st.session_state.recipes:
 
-    with sortable_container(key="recipe_sort"):
-        for r in recipes:
-            if search and search_lower not in (r["name"]+r["ingredients"]).lower():
-                continue
-            with sortable_item(r["id"]):
-                with st.expander(r["name"],expanded=False):
-                    # edit
-                    if st.session_state.edit_id==r["id"]:
-                        recipe_form(r)
-                    else:
-                        # porce
-                        new_portions=st.number_input("Porce",1,50,r["portions"],key="p"+r["id"])
-                        scale=new_portions/r["portions"]
+    if search and search.lower() not in (r["name"]+r["ingredients"]).lower():
+        continue
 
-                        # štítky
-                        tag_line=""
-                        for t in r.get("tags",[]):
-                            color=st.session_state.tags.get(t,"#CCCCCC")
-                            tag_line+=f'<span style="background:{color};padding:2px 6px;border-radius:6px;margin-right:4px;">{t}</span>'
-                        if tag_line: st.markdown(tag_line,unsafe_allow_html=True)
+    with st.expander(r["name"],expanded=False):
 
-                        # ingredience
-                        st.markdown("**Ingredience**")
-                        for l in convert_text(r["ingredients"],scale).splitlines():
-                            st.write("•",l)
+        if st.session_state.edit_id==r["id"]:
+            recipe_form(r)
+        else:
 
-                        # postup
-                        st.markdown("**Postup**")
-                        st.write(r["steps"])
+            new_portions=st.number_input("Porce",1,50,r["portions"],key="p"+r["id"])
+            scale=new_portions/r["portions"]
 
-                        # tlačítka
-                        c1,c2=st.columns(2)
-                        c1.button("✏️ Upravit",key="e"+r["id"],on_click=lambda r=r:st.session_state.update({"edit_id":r["id"]}))
-                        c2.button("🗑 Smazat",key="d"+r["id"],on_click=lambda r=r:[st.session_state.recipes.remove(r),save_db(),st.rerun()])
+            # štítky
+            tag_line=""
+            for t in r.get("tags",[]):
+                color=st.session_state.tags.get(t,"#ccc")
+                tag_line+=f'<span style="background:{color};padding:2px 6px;border-radius:6px;margin-right:4px;">{t}</span>'
+            if tag_line:
+                st.markdown(tag_line,unsafe_allow_html=True)
 
-show_recipes()
+            # ingredience
+            st.markdown("**Ingredience**")
+            for l in convert_text(r["ingredients"],scale).splitlines():
+                st.write("•",l)
 
-# ---------- NEW RECIPE ----------
+            # postup
+            st.markdown("**Postup**")
+            st.write(r["steps"])
+
+            c1,c2=st.columns(2)
+            c1.button("✏️ Upravit",key="e"+r["id"],on_click=lambda r=r:st.session_state.update({"edit_id":r["id"]}))
+            c2.button("🗑 Smazat",key="d"+r["id"],on_click=lambda r=r:[st.session_state.recipes.remove(r),save_db(),st.rerun()])
+
+# ---------- NEW ----------
 if st.session_state.show_new:
     recipe_form()
