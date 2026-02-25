@@ -21,16 +21,21 @@ def safe_save_json(path,data):
         json.dump(data,f,ensure_ascii=False,indent=2)
 
 # ---------- SESSION ----------
-defaults = {"recipes": [], "show_new": False, "show_search": False, "edit_id": None}
+defaults = {
+    "recipes": [],
+    "show_new": False,
+    "show_search": False,
+    "edit_id": None
+}
 for k,v in defaults.items():
     if k not in st.session_state:
         st.session_state[k]=v
 
-LOCAL_FILE = "recipes.json"
+LOCAL_FILE="recipes.json"
 
-# ---------- LOAD DB ----------
+# ---------- LOAD ----------
 def load_db():
-    data = safe_load_json(LOCAL_FILE,[])
+    data=safe_load_json(LOCAL_FILE,[])
     for x in data:
         if "id" not in x:
             x["id"]=new_id()
@@ -42,14 +47,51 @@ def save_db():
 if not st.session_state.recipes:
     st.session_state.recipes=load_db()
 
-# ---------- HEADER ----------
-st.title("Márova kuchařka")
+# ---------- STYLE ----------
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&display=swap');
+
+body,[data-testid="stAppViewContainer"]{
+background:radial-gradient(circle at bottom,#000428,#004e92);
+color:white;
+}
+
+.title{
+font-family:'Dancing Script',cursive;
+font-size:28px;
+text-align:center;
+color:#00ccff;
+margin-bottom:10px;
+}
+
+.topbar{
+position:sticky;
+top:0;
+z-index:999;
+background:#000428;
+padding-bottom:6px;
+}
+.block-container{padding-top:1rem;}
+</style>
+""",unsafe_allow_html=True)
+
+# ---------- TOP BAR ----------
+st.markdown('<div class="topbar">',unsafe_allow_html=True)
+c1,c2,c3=st.columns([1,1,2])
+c1.button("➕",on_click=lambda:st.session_state.update({"show_new":not st.session_state.show_new}))
+c2.button("🔍",on_click=lambda:st.session_state.update({"show_search":not st.session_state.show_search}))
+st.markdown("</div>",unsafe_allow_html=True)
+
+st.markdown('<div class="title">Márova kuchařka</div>',unsafe_allow_html=True)
 
 # ---------- SEARCH ----------
-search = st.text_input("Hledat")
+search=""
+if st.session_state.show_search:
+    search=st.text_input("Hledat")
 
 # ---------- UNITS ----------
-unit_mode = st.selectbox("Jednotky",["Původní","Gramy","Mililitry"])
+unit_mode=st.selectbox("Jednotky",["Původní","Gramy","Mililitry"])
 
 unit_map={
     "ml":1,"l":1000,"g":1,"kg":1000,
@@ -69,21 +111,16 @@ density_db={
 
 # ---------- NORMALIZE UNIT ----------
 def normalize_unit(u):
-    if not u: return u
+    if not u:return u
     u=u.lower()
-
     variants={
-        "hrnky":"hrnek",
-        "hrnku":"hrnek",
-        "hrncích":"hrnek",
-        "lžíce":"lžíce",
-        "lžící":"lžíce",
-        "lžičky":"lžička",
-        "lžiček":"lžička"
+        "hrnky":"hrnek","hrnku":"hrnek","hrncích":"hrnek",
+        "lžičky":"lžička","lžiček":"lžička",
+        "lžíce":"lžíce","lžící":"lžíce"
     }
     return variants.get(u,u)
 
-# ---------- PARSE NUMBER ----------
+# ---------- NUMBER ----------
 def parse_qty(q):
     q=q.replace(",",".")
     try:
@@ -92,10 +129,10 @@ def parse_qty(q):
         try:return float(q)
         except:return None
 
-def clean_num(x):
+def clean(x):
     return int(x) if x==int(x) else round(x,2)
 
-# ---------- FIND DENSITY ----------
+# ---------- DENSITY ----------
 def find_density(name):
     name=name.lower()
     for k,v in density_db.items():
@@ -117,20 +154,20 @@ def convert_line(line,scale):
     unit=normalize_unit(unit)
 
     if unit_mode=="Původní":
-        return f"{clean_num(val)} {unit or ''} {name}".strip()
+        return f"{clean(val)} {unit or ''} {name}".strip()
 
     coef=unit_map.get(unit)
     if not coef:
-        return f"{clean_num(val)} {unit or ''} {name}".strip()
+        return f"{clean(val)} {unit or ''} {name}".strip()
 
     ml=val*coef
 
     if unit_mode=="Mililitry":
-        return f"{clean_num(ml)} ml {name}"
+        return f"{clean(ml)} ml {name}"
 
     dens=find_density(name)
     g=ml*dens
-    return f"{clean_num(g)} g {name}"
+    return f"{clean(g)} g {name}"
 
 def convert_text(text,scale):
     return "\n".join(convert_line(l,scale) for l in text.splitlines() if l.strip())
@@ -142,10 +179,8 @@ def split_ingredients(text):
     return "\n".join(p.strip() for p in parts if p.strip())
 
 # ---------- NEW ----------
-if st.button("➕ Nový recept"):
-    st.session_state.show_new=True
-
 if st.session_state.show_new:
+    st.subheader("Nový recept")
 
     n=st.text_input("Název")
     por=st.number_input("Porce",1,20,4)
@@ -155,7 +190,7 @@ if st.session_state.show_new:
     if st.button("Uložit"):
         st.session_state.recipes.insert(0,{
             "id":new_id(),
-            "name":n,
+            "name":n or "Bez názvu",
             "portions":por,
             "ingredients":split_ingredients(ing),
             "steps":steps
@@ -164,13 +199,13 @@ if st.session_state.show_new:
         st.session_state.show_new=False
         st.rerun()
 
-# ---------- LIST ----------
+# ---------- DISPLAY ----------
 for r in st.session_state.recipes:
 
     if search and search.lower() not in (r["name"]+r["ingredients"]).lower():
         continue
 
-    with st.expander(r["name"]):
+    with st.expander(r["name"],expanded=False):
 
         if st.session_state.edit_id==r["id"]:
 
