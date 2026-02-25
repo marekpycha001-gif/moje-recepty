@@ -25,27 +25,33 @@ defaults = {
     "recipes": [],
     "show_new": False,
     "show_search": False,
-    "edit_id": None
+    "edit_id": None,
+    "tags": {}  # globální databáze štítků
 }
 for k,v in defaults.items():
     if k not in st.session_state:
         st.session_state[k]=v
 
-LOCAL_FILE="recipes.json"
+RECIPES_FILE = "recipes.json"
+TAGS_FILE = "tags.json"
 
 # ---------- LOAD ----------
-def load_db():
-    data=safe_load_json(LOCAL_FILE,[])
-    for x in data:
-        if "id" not in x:
-            x["id"]=new_id()
-    return data
+if not st.session_state.recipes:
+    st.session_state.recipes = safe_load_json(RECIPES_FILE,[])
+if not st.session_state.tags:
+    st.session_state.tags = safe_load_json(TAGS_FILE,{
+        "dezert":"#FFB6C1",
+        "oběd":"#4CAF50",
+        "Itálie":"#FFA500",
+        "Asie":"#00BCD4",
+        "slané pečivo":"#FF5722",
+        "chuťovky":"#9C27B0",
+        "jiné":"#607D8B"
+    })
 
 def save_db():
-    safe_save_json(LOCAL_FILE,st.session_state.recipes)
-
-if not st.session_state.recipes:
-    st.session_state.recipes=load_db()
+    safe_save_json(RECIPES_FILE,st.session_state.recipes)
+    safe_save_json(TAGS_FILE,st.session_state.tags)
 
 # ---------- STYLE ----------
 st.markdown("""
@@ -109,9 +115,11 @@ density_db={
     "sůl":1.2
 }
 
+ignore_units=["ks","kus","vejce","špetka","trochu"]
+
 # ---------- NORMALIZE UNIT ----------
 def normalize_unit(u):
-    if not u:return u
+    if not u: return u
     u=u.lower()
     variants={
         "hrnky":"hrnek","hrnku":"hrnek","hrncích":"hrnek",
@@ -120,14 +128,14 @@ def normalize_unit(u):
     }
     return variants.get(u,u)
 
-# ---------- NUMBER ----------
+# ---------- PARSE NUMBER ----------
 def parse_qty(q):
     q=q.replace(",",".")
     try:
         return float(sum(Fraction(x) for x in q.split()))
     except:
-        try:return float(q)
-        except:return None
+        try: return float(q)
+        except: return None
 
 def clean(x):
     return int(x) if x==int(x) else round(x,2)
@@ -142,31 +150,21 @@ def find_density(name):
 
 # ---------- CONVERT ----------
 def convert_line(line,scale):
-
-    m=re.match(r"([\d\/\.,\s]+)\s*([^\d\s]+)?\s*(.*)",line.strip())
-    if not m:return line
-
+    line=line.strip()
+    m=re.match(r"([\d\/\.,\s]+)\s*([^\d\s]+)?\s*(.*)",line)
+    if not m: return line
     qty,unit,name=m.groups()
     val=parse_qty(qty)
-    if val is None:return line
-
+    if val is None: return line
     val*=scale
     unit=normalize_unit(unit)
-
-    if unit_mode=="Původní":
-        return f"{clean(val)} {unit or ''} {name}".strip()
-
+    if unit_mode=="Původní": return f"{clean(val)} {unit or ''} {name}".strip()
+    if unit in ignore_units: return f"{clean(val)} {unit or ''} {name}".strip()
     coef=unit_map.get(unit)
-    if not coef:
-        return f"{clean(val)} {unit or ''} {name}".strip()
-
+    if not coef: return f"{clean(val)} {unit or ''} {name}".strip()
     ml=val*coef
-
-    if unit_mode=="Mililitry":
-        return f"{clean(ml)} ml {name}"
-
-    dens=find_density(name)
-    g=ml*dens
+    if unit_mode=="Mililitry": return f"{clean(ml)} ml {name}"
+    g=ml*find_density(name)
     return f"{clean(g)} g {name}"
 
 def convert_text(text,scale):
@@ -178,65 +176,93 @@ def split_ingredients(text):
     parts=re.split(r'(?<!\d),(?!\d)|\s+a\s+', text)
     return "\n".join(p.strip() for p in parts if p.strip())
 
-# ---------- NEW ----------
-if st.session_state.show_new:
-    st.subheader("Nový recept")
+# ---------- NEW / EDIT ----------
+def recipe_form(r=None):
+    if r:
+        st.subheader("Upravit recept")
+        n=r["name"]
+        por=r["portions"]
+        ing=r["ingredients"]
+        steps=r["steps"]
+        selected_tags=r.get("tags",[])
+    else:
+        st.subheader("Nový recept")
+        n=""
+        por=4
+        ing=""
+        steps=""
+        selected_tags=[]
 
-    n=st.text_input("Název")
-    por=st.number_input("Porce",1,20,4)
-    ing=st.text_area("Ingredience")
-    steps=st.text_area("Postup")
+    n=st.text_input("Název",n)
+    por=st.number_input("Porce",1,20,por)
+    ing=st.text_area("Ingredience",ing)
+    steps=st.text_area("Postup",steps)
 
-    if st.button("Uložit"):
-        st.session_state.recipes.insert(0,{
-            "id":new_id(),
-            "name":n or "Bez názvu",
-            "portions":por,
-            "ingredients":split_ingredients(ing),
-            "steps":steps
-        })
+    # multi-select štítky
+    tag_names=list(st.session_state.tags.keys())
+    selected_tags=st.multiselect("Štítky",tag_names,default=selected_tags)
+
+    # přidání nového štítku
+    with st.expander("Přidat nový štítek"):
+        new_tag_name=st.text_input("Název štítku")
+        new_tag_color=st.color_picker("Barva štítku","#AAAAAA")
+        if st.button("Přidat štítek"):
+            if new_tag_name and new_tag_name not in st.session_state.tags:
+                st.session_state.tags[new_tag_name]=new_tag_color
+                save_db()
+                st.experimental_rerun()
+
+    if st.button("Uložit recept"):
+        data={
+            "id": r["id"] if r else new_id(),
+            "name": n or "Bez názvu",
+            "portions": por,
+            "ingredients": split_ingredients(ing),
+            "steps": steps,
+            "tags": selected_tags
+        }
+        if r:
+            # update
+            idx=[i for i,x in enumerate(st.session_state.recipes) if x["id"]==r["id"]][0]
+            st.session_state.recipes[idx]=data
+        else:
+            st.session_state.recipes.insert(0,data)
         save_db()
-        st.session_state.show_new=False
-        st.rerun()
+        st.session_state.edit_id=None
+        st.experimental_rerun()
 
-# ---------- DISPLAY ----------
+# ---------- SHOW RECIPES ----------
 for r in st.session_state.recipes:
 
     if search and search.lower() not in (r["name"]+r["ingredients"]).lower():
         continue
 
     with st.expander(r["name"],expanded=False):
-
+        # edit
         if st.session_state.edit_id==r["id"]:
-
-            en=st.text_input("Název",r["name"])
-            ep=st.number_input("Porce",1,20,r["portions"])
-            ei=st.text_area("Ingredience",r["ingredients"])
-            es=st.text_area("Postup",r["steps"])
-
-            if st.button("💾 Uložit změny"):
-                r.update({
-                    "name":en,
-                    "portions":ep,
-                    "ingredients":ei,
-                    "steps":es
-                })
-                st.session_state.edit_id=None
-                save_db()
-                st.rerun()
-
+            recipe_form(r)
         else:
-
-            new_portions=st.number_input("Porce",1,50,r["portions"],key=r["id"])
+            # porce
+            new_portions=st.number_input("Porce",1,50,r["portions"],key="p"+r["id"])
             scale=new_portions/r["portions"]
 
+            # štítky
+            tag_line=""
+            for t in r.get("tags",[]):
+                color=st.session_state.tags.get(t,"#CCCCCC")
+                tag_line+=f'<span style="background:{color};padding:2px 6px;border-radius:6px;margin-right:4px;">{t}</span>'
+            if tag_line: st.markdown(tag_line,unsafe_allow_html=True)
+
+            # ingredience
             st.markdown("**Ingredience**")
             for l in convert_text(r["ingredients"],scale).splitlines():
                 st.write("•",l)
 
+            # postup
             st.markdown("**Postup**")
             st.write(r["steps"])
 
+            # tlačítka
             c1,c2=st.columns(2)
             c1.button("✏️ Upravit",key="e"+r["id"],on_click=lambda r=r:st.session_state.update({"edit_id":r["id"]}))
-            c2.button("🗑 Smazat",key="d"+r["id"],on_click=lambda r=r:[st.session_state.recipes.remove(r),save_db(),st.rerun()])
+            c2.button("🗑 Smazat",key="d"+r["id"],on_click=lambda r=r:[st.session_state.recipes.remove(r),save_db(),st.experimental_rerun()])
