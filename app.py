@@ -14,8 +14,8 @@ def init_connection():
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive"
     ]
-    # Načte tajný klíč ze Streamlit Secrets
-    s_creds = st.secrets["gcp_service_account"]
+    # Načte tajný klíč ze Streamlit Secrets jako surový text a převede ho na JSON
+    s_creds = json.loads(st.secrets["google_json"])
     creds = Credentials.from_service_account_info(s_creds, scopes=scopes)
     client = gspread.authorize(creds)
     
