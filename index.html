@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<title>Recepty</title>
+
+<style>
+body{
+    font-family:Arial;
+    margin:0;
+    background:#f5f5f5;
+}
+
+/* horní panel */
+.topbar{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:10px;
+    background:white;
+    position:sticky;
+    top:0;
+    z-index:10;
+}
+
+.iconBtn{
+    width:34px;
+    height:34px;
+    font-size:18px;
+    border:none;
+    border-radius:8px;
+    background:#eee;
+    cursor:pointer;
+}
+
+.search{
+    flex:1;
+    padding:8px;
+    border-radius:8px;
+    border:1px solid #ccc;
+}
+
+/* seznam */
+#list{
+    padding:10px;
+}
+
+.card{
+    background:white;
+    border-radius:12px;
+    padding:12px;
+    margin-bottom:10px;
+    box-shadow:0 1px 3px rgba(0,0,0,.15);
+}
+
+.title{
+    font-weight:bold;
+    font-size:18px;
+}
+
+.tags{
+    font-size:12px;
+    color:#666;
+    margin-top:4px;
+}
+
+.ing{
+    margin-top:6px;
+    font-size:14px;
+    line-height:1.05;
+    white-space:pre-line;
+}
+
+.btnRow{
+    margin-top:8px;
+    display:flex;
+    gap:6px;
+}
+
+.btn{
+    flex:1;
+    border:none;
+    padding:6px;
+    border-radius:6px;
+    cursor:pointer;
+}
+
+.edit{ background:#d0ebff }
+.del{ background:#ffd6d6 }
+
+/* modal */
+.modal{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,.3);
+    display:none;
+    align-items:center;
+    justify-content:center;
+}
+
+.box{
+    background:white;
+    padding:15px;
+    border-radius:12px;
+    width:300px;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+}
+
+textarea,input{
+    padding:6px;
+}
+
+.save{
+    background:#b2f2bb;
+    border:none;
+    padding:8px;
+    border-radius:8px;
+    cursor:pointer;
+}
+
+.tagFilter{
+    padding:6px;
+    border-radius:6px;
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+<button class="iconBtn" onclick="openForm()">＋</button>
+<button class="iconBtn" onclick="toggleSearch()">🔍</button>
+<input id="search" class="search" placeholder="Hledat..." style="display:none">
+<select id="tagFilter" class="tagFilter" onchange="render()">
+<option value="">Všechny štítky</option>
+</select>
+</div>
+
+<div id="list"></div>
+
+<!-- modal -->
+<div class="modal" id="modal">
+<div class="box">
+
+<input id="name" placeholder="Název">
+
+<textarea id="ing" rows="5" placeholder="Ingredience"></textarea>
+
+<input id="tags" placeholder="štítky oddělené čárkou">
+
+<button class="save" onclick="save()">Uložit</button>
+<button onclick="closeForm()">Zavřít</button>
+
+</div>
+</div>
+
+<script>
+let recipes = JSON.parse(localStorage.getItem("recipes")||"[]");
+let editIndex=null;
+
+function persist(){
+localStorage.setItem("recipes",JSON.stringify(recipes));
+}
+
+function openForm(i=null){
+modal.style.display="flex";
+if(i!=null){
+editIndex=i;
+name.value=recipes[i].name;
+ing.value=recipes[i].ing;
+tags.value=recipes[i].tags.join(",");
+}else{
+editIndex=null;
+name.value="";
+ing.value="";
+tags.value="";
+}
+}
+
+function closeForm(){
+modal.style.display="none";
+}
+
+function save(){
+const obj={
+name:name.value.trim(),
+ing:ing.value.trim(),
+tags:tags.value.split(",").map(t=>t.trim()).filter(Boolean),
+last:Date.now()
+};
+
+if(editIndex!=null) recipes[editIndex]=obj;
+else recipes.push(obj);
+
+persist();
+closeForm();
+updateTags();
+render();
+}
+
+function del(i){
+if(confirm("Smazat recept?")){
+recipes.splice(i,1);
+persist();
+updateTags();
+render();
+}
+}
+
+function openRecipe(i){
+recipes[i].last=Date.now();
+persist();
+render();
+}
+
+function toggleSearch(){
+search.style.display= search.style.display==="none"?"block":"none";
+search.focus();
+}
+
+search.oninput=render;
+
+function updateTags(){
+const all=[...new Set(recipes.flatMap(r=>r.tags))];
+tagFilter.innerHTML='<option value="">Všechny štítky</option>'+
+all.map(t=>`<option>${t}</option>`).join("");
+}
+
+function render(){
+
+let arr=[...recipes];
+
+/* řazení podle posledního otevření */
+arr.sort((a,b)=>(b.last||0)-(a.last||0));
+
+const q=search.value?.toLowerCase()||"";
+const tag=tagFilter.value;
+
+arr=arr.filter(r=>{
+const text=(r.name+" "+r.ing+" "+r.tags.join(" ")).toLowerCase();
+return text.includes(q) && (!tag || r.tags.includes(tag));
+});
+
+list.innerHTML=arr.map(r=>{
+const i=recipes.indexOf(r);
+return`
+<div class="card" onclick="openRecipe(${i})">
+
+<div class="title">${r.name}</div>
+
+<div class="tags">${r.tags.join(", ")}</div>
+
+<div class="ing">${r.ing}</div>
+
+<div class="btnRow" onclick="event.stopPropagation()">
+<button class="btn edit" onclick="openForm(${i})">Upravit</button>
+<button class="btn del" onclick="del(${i})">Smazat</button>
+</div>
+
+</div>
+`;
+}).join("");
+}
+
+updateTags();
+render();
+</script>
+</body>
+</html>
