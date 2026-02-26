@@ -18,10 +18,7 @@ def init_connection():
         "https://www.googleapis.com/auth/drive"
     ]
     
-    # Načte JSON a povolí případné "Entery" v textu
     s_creds = json.loads(st.secrets["google_json"], strict=False)
-    
-    # Natvrdo převede chybné zápisy lomítek zpět na skutečné "Entery"
     s_creds["private_key"] = s_creds["private_key"].replace("\\n", "\n")
     
     creds = Credentials.from_service_account_info(s_creds, scopes=scopes)
@@ -29,7 +26,6 @@ def init_connection():
     
     sheet = client.open("Moje Kuchařka").sheet1
     
-    # Vytvoří hlavičky, pokud je tabulka prázdná
     if not sheet.row_values(1):
         headers = ["id", "name", "type", "portions", "ingredients", "steps", "fav"]
         sheet.append_row(headers)
@@ -197,14 +193,12 @@ def delete_recipe(recipe):
 if st.session_state.show_new:
     st.markdown("### 📝 Nový recept")
     
-    # Příprava AI modelu
     ai_ready = "gemini_api_key" in st.secrets
     if ai_ready:
         genai.configure(api_key=st.secrets["gemini_api_key"])
-        # Použijeme model s přídomkem latest, aby Google našel nejnovější funkční verzi
-        ai_model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        # Používáme nejnovější model verze 2.5 (1.5 už byla vyřazena)
+        ai_model = genai.GenerativeModel('gemini-2.5-flash')
     
-    # Definice promptu pro AI, aby nám vracela striktně JSON (slovník)
     system_prompt = """Jsi expert na extrakci receptů. Z poskytnutého textu nebo obrázku vytáhni recept.
     Vrať výsledek POUZE jako validní JSON formát s těmito přesnými klíči:
     "name" (text, název jídla),
@@ -215,7 +209,6 @@ if st.session_state.show_new:
 
     def process_ai_response(response_text):
         try:
-            # Převede AI text zpět na Python slovník (očistí markdown bloky)
             clean_text = response_text.replace("```json", "").replace("```", "").strip()
             data = json.loads(clean_text)
             return data
@@ -223,7 +216,6 @@ if st.session_state.show_new:
             st.error("Nepodařilo se zpracovat odpověď od AI. Zkus to prosím znovu.")
             return None
 
-    # Tři záložky pro různé způsoby přidání
     tab1, tab2, tab3 = st.tabs(["✍️ Ručně", "🔗 Z odkazu", "📸 Z fotky"])
 
     # --- ZÁLOŽKA 1: RUČNÍ ZADÁNÍ ---
@@ -255,20 +247,17 @@ if st.session_state.show_new:
                 if url_input:
                     with st.spinner("Stahuji a čtu web..."):
                         try:
-                            # 1. Stáhneme hrubý text z webu
                             headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
                             res = requests.get(url_input, headers=headers, timeout=10)
                             soup = BeautifulSoup(res.content, 'html.parser')
                             raw_text = soup.get_text(separator='\n', strip=True)
                             
-                            # 2. Pošleme ho do AI
                             response = ai_model.generate_content(
                                 f"{system_prompt}\n\nZde je text z webu:\n{raw_text}",
                                 generation_config={"response_mime_type": "application/json"}
                             )
                             parsed_data = process_ai_response(response.text)
                             
-                            # 3. Rovnou uložíme a zobrazíme
                             if parsed_data:
                                 parsed_data["id"] = new_id()
                                 parsed_data["fav"] = False
@@ -292,9 +281,7 @@ if st.session_state.show_new:
             if uploaded_file and st.button("🪄 Přečíst z obrázku"):
                 with st.spinner("AI studuje obrázek..."):
                     try:
-                        # Převedeme nahraný soubor do formátu pro AI
                         img = Image.open(uploaded_file)
-                        
                         response = ai_model.generate_content(
                             [system_prompt, img],
                             generation_config={"response_mime_type": "application/json"}
@@ -333,7 +320,6 @@ for r in recipes_sorted:
             st.session_state[edit_key] = False
 
         if st.session_state[edit_key]:
-            # EDITOVACÍ FORMULÁŘ
             with st.form(f"form_{r['id']}"):
                 en = st.text_input("Název", r.get("name", ""))
                 et = st.radio("Typ", ["sladké", "slané"], index=0 if r.get("type")=="sladké" else 1)
@@ -352,7 +338,6 @@ for r in recipes_sorted:
                 st.rerun()
 
         else:
-            # ZOBRAZENÍ RECEPTU
             st.markdown("**Ingredience:**")
             html = "<div class='ingredients'>"
             for l in convert_text(r.get("ingredients", "")).splitlines():
