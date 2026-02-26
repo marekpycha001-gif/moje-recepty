@@ -310,7 +310,11 @@ if st.session_state.show_new:
                             st.rerun()
                     except Exception as e:
                         st.error(f"Chyba při čtení obrázku: {e}")
-
+# ---------- SORT ----------
+recipes_sorted = sorted(
+    st.session_state.recipes,
+    key=lambda x: (not x.get("fav", False), x.get("name", ""))
+)
 # ---------- DISPLAY ----------
 for r in recipes_sorted:
     text = (r.get("name","") + r.get("ingredients","") + r.get("type","")).lower()
