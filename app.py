@@ -45,16 +45,30 @@ def save_db():
 # ---------- STYLE ----------
 st.markdown("""
 <style>
+
+header{visibility:hidden;}
+
+[data-testid="stAppViewContainer"]{
+animation:fadein 0.6s ease;
+}
+
+@keyframes fadein{
+from{opacity:0; transform:translateY(10px)}
+to{opacity:1; transform:translateY(0)}
+}
+
 body,[data-testid="stAppViewContainer"]{
 background:radial-gradient(circle at bottom,#000428,#004e92);
 color:white;
 }
 
 .title{
-font-size:28px;
+font-size:30px;
 text-align:center;
 color:#00ccff;
-margin-bottom:10px;
+margin-bottom:12px;
+font-weight:700;
+letter-spacing:.5px;
 }
 
 .topbar{
@@ -66,11 +80,52 @@ padding-bottom:6px;
 }
 
 .topbuttons{display:flex;gap:6px;}
-.topbuttons button{font-size:14px!important;padding:4px 10px!important;}
+.topbuttons button{
+font-size:14px!important;
+padding:4px 12px!important;
+border-radius:8px!important;
+transition:all .15s ease!important;
+}
 
-.smallgap div{
-margin-bottom:0!important;
-line-height:1.0!important;
+.topbuttons button:hover{
+transform:scale(1.08);
+}
+
+.ingredients p{
+margin:0;
+padding:0;
+line-height:1.05;
+font-size:15px;
+}
+
+[data-testid="stExpander"]{
+border-radius:14px!important;
+overflow:hidden!important;
+transition:all .25s ease;
+border:1px solid rgba(255,255,255,.05)!important;
+}
+
+[data-testid="stExpander"]:hover{
+transform:scale(1.01);
+box-shadow:0 0 18px rgba(0,0,0,.35);
+}
+
+button[kind="secondary"]{
+border-radius:10px!important;
+transition:.15s;
+}
+button[kind="secondary"]:hover{
+transform:scale(1.05);
+}
+
+.tag{
+display:inline-block;
+padding:3px 8px;
+border-radius:8px;
+font-size:13px;
+margin-right:4px;
+margin-bottom:3px;
+font-weight:500;
 }
 
 </style>
@@ -207,7 +262,6 @@ for r in st.session_state.recipes:
 
     with st.expander(r["name"]):
 
-        # označit jako otevřený
         r["last"]=time.time()
         save_db()
 
@@ -218,18 +272,18 @@ for r in st.session_state.recipes:
             newp=st.number_input("Porce",1,50,r["portions"],key="p"+r["id"])
             scale=newp/r["portions"]
 
-            # štítky
             line=""
             for t in r.get("tags",[]):
                 color=st.session_state.tags.get(t,"#ccc")
-                line+=f'<span style="background:{color};padding:2px 6px;border-radius:6px;margin-right:4px;">{t}</span>'
+                line+=f'<span class="tag" style="background:{color}">{t}</span>'
             if line:st.markdown(line,unsafe_allow_html=True)
 
             st.markdown("**Ingredience**")
-            st.markdown('<div class="smallgap">',unsafe_allow_html=True)
+            html="<div class='ingredients'>"
             for l in convert_text(r["ingredients"],scale).splitlines():
-                st.write("•",l)
-            st.markdown('</div>',unsafe_allow_html=True)
+                html+=f"<p>• {l}</p>"
+            html+="</div>"
+            st.markdown(html,unsafe_allow_html=True)
 
             st.markdown("**Postup**")
             st.write(r["steps"])
