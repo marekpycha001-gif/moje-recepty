@@ -1,85 +1,101 @@
 import streamlit as st
-import json, os, requests, re, time, random, string
+import json, os, re, time, random, string
 from fractions import Fraction
+import gspread
+from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="Márova kuchařka", page_icon="🍳", layout="centered")
 
-# ---------- CONFIG ----------
-SDB_URL = "https://sheetdb.io/api/v1/5ygnspqc90f9d"
-LOCAL_FILE = "recipes.json"
+# ---------- GOOGLE SHEETS PŘIPOJENÍ ----------
+@st.cache_resource
+def init_connection():
+    # Definuje, kam všude má aplikace v Googlu přístup
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    # Načte tajný klíč ze Streamlit Secrets
+    s_creds = st.secrets["gcp_service_account"]
+    creds = Credentials.from_service_account_info(s_creds, scopes=scopes)
+    client = gspread.authorize(creds)
+    
+    # Otevře tabulku podle názvu a vybere první list
+    sheet = client.open("Moje Kuchařka").sheet1
+    
+    # Pokud je tabulka úplně prázdná, sama vloží hlavičky
+    if not sheet.row_values(1):
+        headers = ["id", "name", "type", "portions", "ingredients", "steps", "fav"]
+        sheet.append_row(headers)
+        
+    return sheet
+
+try:
+    sheet = init_connection()
+except Exception as e:
+    st.error(f"Nepodařilo se připojit k tabulce. Zkontroluj, zda se jmenuje přesně 'Moje Kuchařka' a zda jsi ji nasdílel tomu robotímu emailu. Detail chyby: {e}")
+    st.stop()
 
 # ---------- HELPERS ----------
 def new_id():
     return "r_" + str(int(time.time())) + "_" + "".join(random.choices(string.ascii_lowercase+string.digits, k=4))
 
-def parse_bool(val):
-    # SheetDB vrací vše jako text, musíme boolean převést správně
-    if isinstance(val, bool): return val
-    if isinstance(val, str): return val.lower() == "true"
-    return False
-
-# ---------- DATABASE API (SheetDB) ----------
+# ---------- DATABASE API (Google Sheets) ----------
 def load_db():
     try:
-        r = requests.get(SDB_URL, timeout=5)
-        if r.status_code == 200:
-            data = r.json()
-            # Pokud API vrátí dict s chybou místo seznamu receptů
-            if isinstance(data, dict) and "error" in data:
-                return []
-            for x in data:
-                x["portions"] = int(x.get("portions", 4))
-                x["fav"] = parse_bool(x.get("fav", False))
-            return data
-    except Exception:
-        pass
-    return []
+        records = sheet.get_all_records()
+        for x in records:
+            x["portions"] = int(x.get("portions", 4) or 4)
+            x["fav"] = str(x.get("fav", "")).lower() == "true"
+        return records
+    except Exception as e:
+        st.error(f"Chyba při stahování dat: {e}")
+        return []
 
 def api_add(recipe):
-    try: 
-        # Zabalíme recept do [] - SheetDB to má raději
-        r = requests.post(SDB_URL, json={"data": [recipe]}, timeout=5)
-        if r.status_code not in (200, 201):
-            st.error(f"Chyba při ukládání: {r.text}")
+    try:
+        row = [
+            recipe.get("id", ""),
+            recipe.get("name", ""),
+            recipe.get("type", ""),
+            recipe.get("portions", ""),
+            recipe.get("ingredients", ""),
+            recipe.get("steps", ""),
+            str(recipe.get("fav", False))
+        ]
+        sheet.append_row(row)
     except Exception as e: 
-        st.error(f"Chyba připojení při ukládání: {e}")
+        st.error(f"Chyba při ukládání do tabulky: {e}")
 
 def api_update(recipe_id, updated_data):
-    try: 
-        requests.put(f"{SDB_URL}/id/{recipe_id}", json={"data": updated_data}, timeout=5)
-    except Exception: pass
+    try:
+        cell = sheet.find(recipe_id, in_column=1)
+        if cell:
+            row_idx = cell.row
+            row_data = [
+                updated_data.get("id", recipe_id),
+                updated_data.get("name", ""),
+                updated_data.get("type", ""),
+                updated_data.get("portions", ""),
+                updated_data.get("ingredients", ""),
+                updated_data.get("steps", ""),
+                str(updated_data.get("fav", False))
+            ]
+            sheet.update(f"A{row_idx}:G{row_idx}", [row_data])
+    except Exception as e:
+        st.error(f"Chyba při úpravě receptu: {e}")
 
 def api_delete(recipe_id):
-    try: 
-        requests.delete(f"{SDB_URL}/id/{recipe_id}", timeout=5)
-    except Exception: pass
+    try:
+        cell = sheet.find(recipe_id, in_column=1)
+        if cell:
+            sheet.delete_rows(cell.row)
+    except Exception as e:
+        st.error(f"Chyba při mazání receptu: {e}")
 
-def migrate_local_to_cloud(local_data):
-    try: 
-        r = requests.post(SDB_URL, json={"data": local_data}, timeout=10)
-        if r.status_code in (200, 201):
-            st.success("Tvoje staré recepty byly úspěšně překopírovány do Google Tabulky! 🎉")
-        else:
-            st.error(f"Nepodařilo se přesunout staré recepty: {r.text}")
-    except Exception as e: 
-        st.error(f"Chyba při komunikaci s tabulkou: {e}")
-
-# ---------- INITIALIZATION & MIGRATION ----------
+# ---------- INITIALIZATION ----------
 if "recipes" not in st.session_state:
-    cloud_data = load_db()
-    
-    # Pokud je cloud prázdný, zkusíme načíst lokální JSON a nahrát ho tam
-    if not cloud_data and os.path.exists(LOCAL_FILE):
-        try:
-            with open(LOCAL_FILE, "r", encoding="utf8") as f:
-                local_data = json.load(f)
-            if local_data:
-                migrate_local_to_cloud(local_data)
-                cloud_data = local_data
-        except Exception:
-            pass
-            
-    st.session_state.recipes = cloud_data
+    st.session_state.recipes = load_db()
+    # (Odstranil jsem migraci lokálního souboru, protože na GitHubu se stará data beztak neukládala, jedeme načisto z cloudu)
 
 if "show_new" not in st.session_state: st.session_state.show_new = False
 if "show_search" not in st.session_state: st.session_state.show_search = False
@@ -163,7 +179,7 @@ def convert_line(line):
     coef = unit_map.get((unit or "").lower(), 1)
     coef *= density.get(name.lower().strip(), 1)
     if coef == 1: return line
-    return f"**{round(val*coef)} g** {name.strip()} *(původně: {line})*" # Ukáže i původní hodnotu
+    return f"**{round(val*coef)} g** {name.strip()} *(původně: {line})*"
 
 def convert_text(t):
     return "\n".join(convert_line(l) for l in t.splitlines() if l.strip())
@@ -193,7 +209,7 @@ if st.session_state.show_new:
                 "name": n or "Bez názvu",
                 "type": typ,
                 "portions": por,
-                "ingredients": ing, # Ukládáme originální text!
+                "ingredients": ing,
                 "steps": steps,
                 "fav": False
             }
@@ -217,7 +233,6 @@ for r in recipes_sorted:
     title = ("⭐ " + r.get("name", "")) if r.get("fav") else r.get("name", "")
 
     with st.expander(title):
-        # Unikátní klíč pro uchování stavu editace konkrétního receptu
         edit_key = f"edit_{r['id']}"
         if edit_key not in st.session_state:
             st.session_state[edit_key] = False
@@ -257,7 +272,6 @@ for r in recipes_sorted:
 
             st.divider()
             
-            # Tlačítka pro akce
             c1, c2, c3 = st.columns(3)
             with c1:
                 fav_label = "Odstranit z oblíbených" if r.get("fav") else "⭐ Přidat do oblíbených"
