@@ -18,7 +18,10 @@ def init_connection():
         "https://www.googleapis.com/auth/drive"
     ]
     
+    # Načte JSON a povolí případné "Entery" v textu
     s_creds = json.loads(st.secrets["google_json"], strict=False)
+    
+    # Oprava zalomení řádků v klíči
     s_creds["private_key"] = s_creds["private_key"].replace("\\n", "\n")
     
     creds = Credentials.from_service_account_info(s_creds, scopes=scopes)
@@ -26,6 +29,7 @@ def init_connection():
     
     sheet = client.open("Moje Kuchařka").sheet1
     
+    # Vytvoří hlavičky, pokud je tabulka prázdná
     if not sheet.row_values(1):
         headers = ["id", "name", "type", "portions", "ingredients", "steps", "fav"]
         sheet.append_row(headers)
@@ -196,8 +200,7 @@ if st.session_state.show_new:
     ai_ready = "gemini_api_key" in st.secrets
     if ai_ready:
         genai.configure(api_key=st.secrets["gemini_api_key"])
-        # Používáme nejnovější model verze 2.5 (1.5 už byla vyřazena)
-        ai_model = genai.GenerativeModel('gemini-2.5-flash')
+        ai_model = genai.GenerativeModel('gemini-2.0-flash')
     
     system_prompt = """Jsi expert na extrakci receptů. Z poskytnutého textu nebo obrázku vytáhni recept.
     Vrať výsledek POUZE jako validní JSON formát s těmito přesnými klíči:
@@ -209,11 +212,18 @@ if st.session_state.show_new:
 
     def process_ai_response(response_text):
         try:
+            # Očistíme text od markdown značek
             clean_text = response_text.replace("```json", "").replace("```", "").strip()
             data = json.loads(clean_text)
+            
+            # OPRAVA: Pokud AI vrátila recept v seznamu [ {} ], vytáhneme ho
+            if isinstance(data, list):
+                if len(data) > 0: data = data[0]
+                else: return None
+            
             return data
         except Exception as e:
-            st.error("Nepodařilo se zpracovat odpověď od AI. Zkus to prosím znovu.")
+            st.error(f"Nepodařilo se zpracovat odpověď od AI. Detail: {e}")
             return None
 
     tab1, tab2, tab3 = st.tabs(["✍️ Ručně", "🔗 Z odkazu", "📸 Z fotky"])
@@ -240,12 +250,12 @@ if st.session_state.show_new:
     # --- ZÁLOŽKA 2: Z ODKAZU ---
     with tab2:
         if not ai_ready:
-            st.warning("Pro tuto funkci musíš nastavit 'gemini_api_key' ve Streamlit Secrets.")
+            st.warning("Nastav 'gemini_api_key' v Secrets.")
         else:
             url_input = st.text_input("Vlož URL adresu receptu:")
             if st.button("🪄 Vytěžit recept z webu"):
                 if url_input:
-                    with st.spinner("Stahuji a čtu web..."):
+                    with st.spinner("Pracuji na tom..."):
                         try:
                             headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
                             res = requests.get(url_input, headers=headers, timeout=10)
@@ -264,20 +274,16 @@ if st.session_state.show_new:
                                 st.session_state.recipes.insert(0, parsed_data)
                                 api_add(parsed_data)
                                 st.session_state.show_new = False
-                                st.success("Recept úspěšně vytěžen!")
-                                time.sleep(1)
                                 st.rerun()
                         except Exception as e:
-                            st.error(f"Při stahování webu nastala chyba (web tě možná zablokoval). Zkus metodu z fotky. Detail: {e}")
+                            st.error(f"Chyba při stahování: {e}")
 
     # --- ZÁLOŽKA 3: Z FOTKY / SCREENSHOTU ---
     with tab3:
         if not ai_ready:
-            st.warning("Pro tuto funkci musíš nastavit 'gemini_api_key' ve Streamlit Secrets.")
+            st.warning("Nastav 'gemini_api_key' v Secrets.")
         else:
-            st.info("Vyfoť stránku kuchařky nebo udělej printscreen receptu a nahraj ho sem.")
             uploaded_file = st.file_uploader("Nahrát obrázek", type=["png", "jpg", "jpeg", "webp"])
-            
             if uploaded_file and st.button("🪄 Přečíst z obrázku"):
                 with st.spinner("AI studuje obrázek..."):
                     try:
@@ -294,8 +300,6 @@ if st.session_state.show_new:
                             st.session_state.recipes.insert(0, parsed_data)
                             api_add(parsed_data)
                             st.session_state.show_new = False
-                            st.success("Recept úspěšně přečten z obrázku!")
-                            time.sleep(1)
                             st.rerun()
                     except Exception as e:
                         st.error(f"Chyba při čtení obrázku: {e}")
@@ -327,13 +331,13 @@ for r in recipes_sorted:
                 ei = st.text_area("Ingredience", r.get("ingredients", ""))
                 es = st.text_area("Postup", r.get("steps", ""))
 
-                if st.form_submit_button("💾 Uložit změny"):
+                if st.form_submit_button("💾 Uložit"):
                     r.update({"name": en, "type": et, "portions": ep, "ingredients": ei, "steps": es})
                     api_update(r["id"], r)
                     st.session_state[edit_key] = False
                     st.rerun()
                     
-            if st.button("❌ Zrušit úpravy", key=f"cancel_{r['id']}"):
+            if st.button("❌ Zrušit", key=f"cancel_{r['id']}"):
                 st.session_state[edit_key] = False
                 st.rerun()
 
@@ -347,11 +351,9 @@ for r in recipes_sorted:
 
             st.markdown("**Postup:**")
             for l in r.get("steps", "").splitlines():
-                if l.strip():
-                    st.markdown(l)
+                if l.strip(): st.markdown(l)
 
             st.divider()
-            
             c1, c2, c3 = st.columns(3)
             with c1:
                 fav_label = "Odstranit z oblíbených" if r.get("fav") else "⭐ Přidat do oblíbených"
