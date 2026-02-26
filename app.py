@@ -14,8 +14,12 @@ def init_connection():
         "https://www.googleapis.com/auth/drive"
     ]
     
-    # TADY JE TA MAGIE: strict=False řekne Pythonu, ať se nebojí skutečných "Enterů" v tajném klíči
+    # Načte JSON
     s_creds = json.loads(st.secrets["google_json"], strict=False)
+    
+    # TADY JE TA MAGICKÁ OPRAVA: 
+    # Streamlit občas vezme \n jako obyčejný text (lomítko a N). Tímto to natvrdo převedeme zpět na skutečné "Entery".
+    s_creds["private_key"] = s_creds["private_key"].replace("\\n", "\n")
     
     creds = Credentials.from_service_account_info(s_creds, scopes=scopes)
     client = gspread.authorize(creds)
