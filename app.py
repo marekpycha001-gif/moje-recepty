@@ -147,34 +147,6 @@ with c2:
 st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown('<div class="title">Márova kuchařka</div>', unsafe_allow_html=True)
-# --- JEDNORÁZOVÁ MIGRAČNÍ SEKCE ---
-if os.path.exists("recipes.json"):
-    if st.button("🚨 Přenést staré recepty do Google Tabulky"):
-        try:
-            with open("recipes.json", "r", encoding="utf8") as f:
-                old_recipes = json.load(f)
-            
-            if old_recipes:
-                rows_to_add = []
-                for r in old_recipes:
-                    row = [
-                        r.get("id", new_id()),
-                        r.get("name", ""),
-                        r.get("type", ""),
-                        r.get("portions", ""),
-                        r.get("ingredients", ""),
-                        r.get("steps", ""),
-                        str(r.get("fav", False))
-                    ]
-                    rows_to_add.append(row)
-                
-                sheet.append_rows(rows_to_add)
-                st.success("Hotovo! Recepty jsou v tabulce. Dej refresh (F5) stránky.")
-            else:
-                st.warning("Soubor recipes.json je prázdný.")
-        except Exception as e:
-            st.error(f"Chyba při kopírování: {e}")
-# ----------------------------------
 
 # ---------- SEARCH ----------
 search = ""
