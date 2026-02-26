@@ -9,20 +9,19 @@ st.set_page_config(page_title="Márova kuchařka", page_icon="🍳", layout="cen
 # ---------- GOOGLE SHEETS PŘIPOJENÍ ----------
 @st.cache_resource
 def init_connection():
-    # Definuje, kam všude má aplikace v Googlu přístup
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive"
     ]
-    # Načte tajný klíč ze Streamlit Secrets jako surový text a převede ho na JSON
-    s_creds = json.loads(st.secrets["google_json"])
+    
+    # TADY JE TA MAGIE: strict=False řekne Pythonu, ať se nebojí skutečných "Enterů" v tajném klíči
+    s_creds = json.loads(st.secrets["google_json"], strict=False)
+    
     creds = Credentials.from_service_account_info(s_creds, scopes=scopes)
     client = gspread.authorize(creds)
     
-    # Otevře tabulku podle názvu a vybere první list
     sheet = client.open("Moje Kuchařka").sheet1
     
-    # Pokud je tabulka úplně prázdná, sama vloží hlavičky
     if not sheet.row_values(1):
         headers = ["id", "name", "type", "portions", "ingredients", "steps", "fav"]
         sheet.append_row(headers)
@@ -32,7 +31,7 @@ def init_connection():
 try:
     sheet = init_connection()
 except Exception as e:
-    st.error(f"Nepodařilo se připojit k tabulce. Zkontroluj, zda se jmenuje přesně 'Moje Kuchařka' a zda jsi ji nasdílel tomu robotímu emailu. Detail chyby: {e}")
+    st.error(f"Nepodařilo se připojit k tabulce. Detail chyby: {e}")
     st.stop()
 
 # ---------- HELPERS ----------
@@ -95,7 +94,6 @@ def api_delete(recipe_id):
 # ---------- INITIALIZATION ----------
 if "recipes" not in st.session_state:
     st.session_state.recipes = load_db()
-    # (Odstranil jsem migraci lokálního souboru, protože na GitHubu se stará data beztak neukládala, jedeme načisto z cloudu)
 
 if "show_new" not in st.session_state: st.session_state.show_new = False
 if "show_search" not in st.session_state: st.session_state.show_search = False
@@ -103,15 +101,12 @@ if "show_search" not in st.session_state: st.session_state.show_search = False
 # ---------- STYLE ----------
 st.markdown("""
 <style>
-/* Odstranění horní mezery, headeru a zbytečných linek */
 header, hr, [data-testid="stHeader"] {display:none!important;}
 .block-container {padding-top: 1rem !important;}
-
 body, [data-testid="stAppViewContainer"] {
     background: radial-gradient(circle at bottom, #000428, #004e92);
     color: white;
 }
-
 .title {
     font-size: 28px;
     text-align: center;
@@ -119,20 +114,17 @@ body, [data-testid="stAppViewContainer"] {
     margin-bottom: 20px;
     font-weight: 700;
 }
-
 .topbar {
     display: flex;
     justify-content: flex-start;
     gap: 10px;
     margin-bottom: 15px;
 }
-
 button {
     border-radius: 10px !important;
     transition: .15s;
 }
 button:hover {transform: scale(1.05)}
-
 .ingredients p {
     margin: 0;
     line-height: 1.2;
