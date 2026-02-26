@@ -4,3 +4,4 @@ pillow
 requests
 beautifulsoup4
 pytesseract
+gspread
