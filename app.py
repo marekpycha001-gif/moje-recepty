@@ -24,31 +24,45 @@ def load_db():
         r = requests.get(SDB_URL, timeout=5)
         if r.status_code == 200:
             data = r.json()
-            # Ošetření typů po stažení z textové tabulky
+            # Pokud API vrátí dict s chybou místo seznamu receptů
+            if isinstance(data, dict) and "error" in data:
+                return []
             for x in data:
                 x["portions"] = int(x.get("portions", 4))
                 x["fav"] = parse_bool(x.get("fav", False))
             return data
-    except Exception as e:
-        st.error("Chyba při stahování z databáze.")
+    except Exception:
+        pass
     return []
 
 def api_add(recipe):
-    try: requests.post(SDB_URL, json={"data": recipe}, timeout=5)
-    except Exception: pass
+    try: 
+        # Zabalíme recept do [] - SheetDB to má raději
+        r = requests.post(SDB_URL, json={"data": [recipe]}, timeout=5)
+        if r.status_code not in (200, 201):
+            st.error(f"Chyba při ukládání: {r.text}")
+    except Exception as e: 
+        st.error(f"Chyba připojení při ukládání: {e}")
 
 def api_update(recipe_id, updated_data):
-    try: requests.put(f"{SDB_URL}/id/{recipe_id}", json={"data": updated_data}, timeout=5)
+    try: 
+        requests.put(f"{SDB_URL}/id/{recipe_id}", json={"data": updated_data}, timeout=5)
     except Exception: pass
 
 def api_delete(recipe_id):
-    try: requests.delete(f"{SDB_URL}/id/{recipe_id}", timeout=5)
+    try: 
+        requests.delete(f"{SDB_URL}/id/{recipe_id}", timeout=5)
     except Exception: pass
 
 def migrate_local_to_cloud(local_data):
-    # Pokud je cloud prázdný, pošleme tam vše z lokálu
-    try: requests.post(SDB_URL, json={"data": local_data}, timeout=10)
-    except Exception: pass
+    try: 
+        r = requests.post(SDB_URL, json={"data": local_data}, timeout=10)
+        if r.status_code in (200, 201):
+            st.success("Tvoje staré recepty byly úspěšně překopírovány do Google Tabulky! 🎉")
+        else:
+            st.error(f"Nepodařilo se přesunout staré recepty: {r.text}")
+    except Exception as e: 
+        st.error(f"Chyba při komunikaci s tabulkou: {e}")
 
 # ---------- INITIALIZATION & MIGRATION ----------
 if "recipes" not in st.session_state:
@@ -231,7 +245,6 @@ for r in recipes_sorted:
             # ZOBRAZENÍ RECEPTU
             st.markdown("**Ingredience:**")
             html = "<div class='ingredients'>"
-            # Tady se volá převod jednotek POUZE pro zobrazení
             for l in convert_text(r.get("ingredients", "")).splitlines():
                 html += f"<p>• {l}</p>"
             html += "</div><br>"
