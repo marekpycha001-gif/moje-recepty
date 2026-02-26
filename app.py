@@ -7,7 +7,6 @@ st.set_page_config(page_title="Márova kuchařka", page_icon="🍳", layout="cen
 # ---------- CONFIG ----------
 SDB_URL = "https://sheetdb.io/api/v1/5ygnspqc90f9d"
 LOCAL_FILE = "recipes.json"
-CACHE_FILE = "conversion_cache.json"
 
 # ---------- HELPERS ----------
 def new_id():
@@ -31,10 +30,7 @@ for k,v in defaults.items():
     if k not in st.session_state:
         st.session_state[k]=v
 
-# ---------- CACHE ----------
-conversion_cache = safe_load_json(CACHE_FILE,{})
-
-# ---------- LOAD DB ----------
+# ---------- LOAD ----------
 def load_db():
     try:
         r=requests.get(SDB_URL,timeout=3)
@@ -48,11 +44,13 @@ def load_db():
     for x in data:
         if "id" not in x:
             x["id"]=new_id()
+        if "type" not in x:
+            x["type"]="slané"   # fallback pro staré recepty
+
     return data
 
 def save_db():
     safe_save_json(LOCAL_FILE,st.session_state.recipes)
-    safe_save_json(CACHE_FILE,conversion_cache)
 
 if not st.session_state.recipes:
     st.session_state.recipes=load_db()
@@ -61,7 +59,10 @@ if not st.session_state.recipes:
 st.markdown("""
 <style>
 
-header{visibility:hidden;}
+/* odstranění horní lišty + čáry */
+header{display:none!important;}
+hr{display:none!important;}
+[data-testid="stHeader"]{display:none!important;}
 
 body,[data-testid="stAppViewContainer"]{
 background:radial-gradient(circle at bottom,#000428,#004e92);
@@ -82,7 +83,6 @@ top:0;
 z-index:999;
 background:#000428;
 padding-bottom:6px;
-border:none!important;
 }
 
 button{
@@ -97,15 +97,10 @@ line-height:1.05;
 font-size:15px;
 }
 
-[data-testid="stExpander"]{
-border:none!important;
-box-shadow:none!important;
-}
-
 </style>
 """,unsafe_allow_html=True)
 
-# ---------- TOP BAR ----------
+# ---------- TOP ----------
 st.markdown('<div class="topbar">',unsafe_allow_html=True)
 c1,c2,c3=st.columns([1,1,2])
 with c1:
@@ -176,25 +171,28 @@ if st.session_state.show_new:
     st.button("Uložit recept",on_click=save_new)
 
 # ---------- SORT ----------
-recipes_sorted=sorted(st.session_state.recipes,key=lambda x:(not x.get("fav",False),x["name"]))
+recipes_sorted=sorted(
+    st.session_state.recipes,
+    key=lambda x:(not x.get("fav",False),x.get("name",""))
+)
 
 # ---------- DISPLAY ----------
 for r in recipes_sorted:
 
-    text=(r["name"]+r["ingredients"]+r["type"]).lower()
+    text=(r.get("name","")+r.get("ingredients","")+r.get("type","")).lower()
     if search and search not in text:
         continue
 
-    title=("⭐ "+r["name"]) if r.get("fav") else r["name"]
+    title=("⭐ "+r.get("name","")) if r.get("fav") else r.get("name","")
 
     with st.expander(title):
 
         if st.session_state.edit_id==r["id"]:
-            en=st.text_input("Název",r["name"])
-            et=st.radio("Typ",["sladké","slané"],index=0 if r["type"]=="sladké" else 1)
-            ep=st.number_input("Porce",1,20,r["portions"])
-            ei=st.text_area("Ingredience",r["ingredients"])
-            es=st.text_area("Postup",r["steps"])
+            en=st.text_input("Název",r.get("name",""))
+            et=st.radio("Typ",["sladké","slané"],index=0 if r.get("type")=="sladké" else 1)
+            ep=st.number_input("Porce",1,20,r.get("portions",4))
+            ei=st.text_area("Ingredience",r.get("ingredients",""))
+            es=st.text_area("Postup",r.get("steps",""))
 
             def save_edit(r=r):
                 r.update({"name":en,"type":et,"portions":ep,"ingredients":convert_text(ei),"steps":es})
@@ -207,16 +205,16 @@ for r in recipes_sorted:
         else:
             st.markdown("**Ingredience**")
             html="<div class='ingredients'>"
-            for l in r["ingredients"].splitlines():
+            for l in r.get("ingredients","").splitlines():
                 html+=f"<p>• {l}</p>"
             html+="</div>"
             st.markdown(html,unsafe_allow_html=True)
 
             st.markdown("**Postup**")
-            for l in r["steps"].splitlines():
+            for l in r.get("steps","").splitlines():
                 st.markdown(l)
 
             c1,c2,c3=st.columns(3)
-            c1.button("⭐",key=r["id"]+"f",on_click=lambda r=r:[r.update({"fav":not r["fav"]}),save_db(),st.rerun()])
+            c1.button("⭐",key=r["id"]+"f",on_click=lambda r=r:[r.update({"fav":not r.get("fav",False)}),save_db(),st.rerun()])
             c2.button("✏️",key=r["id"]+"e",on_click=lambda r=r:st.session_state.update({"edit_id":r["id"]}))
             c3.button("🗑",key=r["id"]+"d",on_click=lambda r=r:[st.session_state.recipes.remove(r),save_db(),st.rerun()])
