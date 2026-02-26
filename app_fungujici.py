@@ -3,6 +3,9 @@ import json, os, re, time, random, string
 from fractions import Fraction
 import gspread
 from google.oauth2.service_account import Credentials
+import google.generativeai as genai
+from bs4 import BeautifulSoup
+from PIL import Image
 
 st.set_page_config(page_title="Márova kuchařka", page_icon="🍳", layout="centered")
 
@@ -189,36 +192,124 @@ def delete_recipe(recipe):
     st.session_state.recipes.remove(recipe)
     api_delete(recipe["id"])
 
-# ---------- NEW RECIPE FORM ----------
+# ---------- NEW RECIPE FORM (AI ENHANCED) ----------
 if st.session_state.show_new:
     st.markdown("### 📝 Nový recept")
-    with st.form("new_recipe_form", clear_on_submit=True):
-        n = st.text_input("Název")
-        typ = st.radio("Typ", ["sladké", "slané"], horizontal=True)
-        por = st.number_input("Porce", 1, 20, 4)
-        ing = st.text_area("Ingredience (co řádek, to položka)")
-        steps = st.text_area("Postup")
-        
-        if st.form_submit_button("✅ Uložit recept"):
-            new_r = {
-                "id": new_id(),
-                "name": n or "Bez názvu",
-                "type": typ,
-                "portions": por,
-                "ingredients": ing,
-                "steps": steps,
-                "fav": False
-            }
-            st.session_state.recipes.insert(0, new_r)
-            api_add(new_r)
-            st.session_state.show_new = False
-            st.rerun()
+    
+    # Příprava AI modelu
+    ai_ready = "gemini_api_key" in st.secrets
+    if ai_ready:
+        genai.configure(api_key=st.secrets["gemini_api_key"])
+        # Použijeme Flash model - je rychlý a levný
+        ai_model = genai.GenerativeModel('gemini-1.5-flash')
+    
+    # Definice promptu pro AI, aby nám vracela striktně JSON (slovník)
+    system_prompt = """Jsi expert na extrakci receptů. Z poskytnutého textu nebo obrázku vytáhni recept.
+    Vrať výsledek POUZE jako JSON s těmito přesnými klíči:
+    "name" (text, název jídla),
+    "type" (text, přesně buď "slané" nebo "sladké"),
+    "portions" (číslo, odhadni porce, výchozí 4),
+    "ingredients" (text, každá surovina na nový řádek),
+    "steps" (text, očíslované kroky přípravy, každý na nový řádek)."""
 
-# ---------- SORT ----------
-recipes_sorted = sorted(
-    st.session_state.recipes,
-    key=lambda x: (not x.get("fav", False), x.get("name", ""))
-)
+    def process_ai_response(response_text):
+        try:
+            # Převede AI text zpět na Python slovník
+            data = json.loads(response_text)
+            return data
+        except Exception as e:
+            st.error("Nepodařilo se zpracovat odpověď od AI. Zkus to prosím znovu.")
+            return None
+
+    # Tři záložky pro různé způsoby přidání
+    tab1, tab2, tab3 = st.tabs(["✍️ Ručně", "🔗 Z odkazu", "📸 Z fotky/Screenu"])
+
+    # --- ZÁLOŽKA 1: RUČNÍ ZADÁNÍ ---
+    with tab1:
+        with st.form("new_recipe_form_manual", clear_on_submit=True):
+            n = st.text_input("Název")
+            typ = st.radio("Typ", ["slané", "sladké"], horizontal=True)
+            por = st.number_input("Porce", 1, 20, 4)
+            ing = st.text_area("Ingredience (co řádek, to položka)")
+            steps = st.text_area("Postup")
+            
+            if st.form_submit_button("✅ Uložit recept"):
+                new_r = {
+                    "id": new_id(), "name": n or "Bez názvu", "type": typ,
+                    "portions": por, "ingredients": ing, "steps": steps, "fav": False
+                }
+                st.session_state.recipes.insert(0, new_r)
+                api_add(new_r)
+                st.session_state.show_new = False
+                st.rerun()
+
+    # --- ZÁLOŽKA 2: Z ODKAZU ---
+    with tab2:
+        if not ai_ready:
+            st.warning("Pro tuto funkci musíš nastavit 'gemini_api_key' ve Streamlit Secrets.")
+        else:
+            url_input = st.text_input("Vlož URL adresu receptu:")
+            if st.button("🪄 Vytěžit recept z webu"):
+                if url_input:
+                    with st.spinner("Stahuji a čtu web..."):
+                        try:
+                            # 1. Stáhneme hrubý text z webu (s maskováním, že jsme prohlížeč)
+                            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+                            res = requests.get(url_input, headers=headers, timeout=10)
+                            soup = BeautifulSoup(res.content, 'html.parser')
+                            raw_text = soup.get_text(separator='\n', strip=True)
+                            
+                            # 2. Pošleme ho do AI k roztřídění (vynutíme JSON formát)
+                            response = ai_model.generate_content(
+                                [system_prompt, f"Zde je text z webu:\n{raw_text}"],
+                                generation_config={"response_mime_type": "application/json"}
+                            )
+                            parsed_data = process_ai_response(response.text)
+                            
+                            # 3. Rovnou uložíme a zobrazíme
+                            if parsed_data:
+                                parsed_data["id"] = new_id()
+                                parsed_data["fav"] = False
+                                st.session_state.recipes.insert(0, parsed_data)
+                                api_add(parsed_data)
+                                st.session_state.show_new = False
+                                st.success("Recept úspěšně vytěžen!")
+                                time.sleep(1)
+                                st.rerun()
+                        except Exception as e:
+                            st.error(f"Při stahování webu nastala chyba (web tě možná zablokoval). Zkus metodu z fotky. Detail: {e}")
+
+    # --- ZÁLOŽKA 3: Z FOTKY / SCREENSHOTU ---
+    with tab3:
+        if not ai_ready:
+            st.warning("Pro tuto funkci musíš nastavit 'gemini_api_key' ve Streamlit Secrets.")
+        else:
+            st.info("Vyfoť stránku kuchařky nebo udělej printscreen receptu (i s obrázkem jídla) a nahraj ho sem.")
+            uploaded_file = st.file_uploader("Nahrát obrázek", type=["png", "jpg", "jpeg", "webp"])
+            
+            if uploaded_file and st.button("🪄 Přečíst z obrázku"):
+                with st.spinner("AI studuje obrázek..."):
+                    try:
+                        # Převedeme nahraný soubor do formátu pro AI
+                        img = Image.open(uploaded_file)
+                        
+                        response = ai_model.generate_content(
+                            [system_prompt, img],
+                            generation_config={"response_mime_type": "application/json"}
+                        )
+                        parsed_data = process_ai_response(response.text)
+                        
+                        if parsed_data:
+                            parsed_data["id"] = new_id()
+                            parsed_data["fav"] = False
+                            st.session_state.recipes.insert(0, parsed_data)
+                            api_add(parsed_data)
+                            st.session_state.show_new = False
+                            st.success("Recept úspěšně přečten z obrázku!")
+                            time.sleep(1)
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"Chyba při čtení obrázku: {e}")
 
 # ---------- DISPLAY ----------
 for r in recipes_sorted:
