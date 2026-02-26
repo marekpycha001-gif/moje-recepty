@@ -59,10 +59,8 @@ if not st.session_state.recipes:
 st.markdown("""
 <style>
 
-/* odstranění horní lišty + čáry */
-header{display:none!important;}
-hr{display:none!important;}
-[data-testid="stHeader"]{display:none!important;}
+/* odstranění horní lišty Streamlit a čáry */
+header, hr, [data-testid="stHeader"]{display:none!important;}
 
 body,[data-testid="stAppViewContainer"]{
 background:radial-gradient(circle at bottom,#000428,#004e92);
@@ -107,8 +105,7 @@ with c1:
     st.button("➕",on_click=lambda:st.session_state.update({"show_new":not st.session_state.show_new}))
 with c2:
     st.button("🔍",on_click=lambda:st.session_state.update({"show_search":not st.session_state.show_search}))
-with c3:
-    st.button("💾 Uložit",on_click=save_db)
+# tlačítko "Uložit" necháme pryč, protože bylo zbytečné
 st.markdown("</div>",unsafe_allow_html=True)
 
 st.markdown('<div class="title">Márova kuchařka</div>',unsafe_allow_html=True)
