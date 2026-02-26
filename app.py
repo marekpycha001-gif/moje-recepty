@@ -1,8 +1,13 @@
 import streamlit as st
-import json, os, re, time, random, string
+import json, os, requests, re, time, random, string
 from fractions import Fraction
 
 st.set_page_config(page_title="Márova kuchařka", page_icon="🍳", layout="centered")
+
+# ---------- CONFIG ----------
+SDB_URL = "https://sheetdb.io/api/v1/5ygnspqc90f9d"
+LOCAL_FILE = "recipes.json"
+CACHE_FILE = "conversion_cache.json"
 
 # ---------- HELPERS ----------
 def new_id():
@@ -21,26 +26,36 @@ def safe_save_json(path,data):
         json.dump(data,f,ensure_ascii=False,indent=2)
 
 # ---------- SESSION ----------
-defaults = {"recipes": [],"show_new": False,"show_search": False,"edit_id": None,"tags": {}}
+defaults = {"recipes": [], "show_new": False, "show_search": False, "edit_id": None}
 for k,v in defaults.items():
     if k not in st.session_state:
         st.session_state[k]=v
 
-RECIPES_FILE="recipes.json"
-TAGS_FILE="tags.json"
+# ---------- CACHE ----------
+conversion_cache = safe_load_json(CACHE_FILE,{})
 
-if not st.session_state.recipes:
-    st.session_state.recipes=safe_load_json(RECIPES_FILE,[])
+# ---------- LOAD DB ----------
+def load_db():
+    try:
+        r=requests.get(SDB_URL,timeout=3)
+        data=r.json() if r.status_code==200 else []
+    except:
+        data=[]
 
-if not st.session_state.tags:
-    st.session_state.tags=safe_load_json(TAGS_FILE,{
-        "dezert":"#FFB6C1","oběd":"#4CAF50","Itálie":"#FFA500",
-        "Asie":"#00BCD4","slané pečivo":"#FF5722","chuťovky":"#9C27B0","jiné":"#607D8B"
-    })
+    if not data:
+        data=safe_load_json(LOCAL_FILE,[])
+
+    for x in data:
+        if "id" not in x:
+            x["id"]=new_id()
+    return data
 
 def save_db():
-    safe_save_json(RECIPES_FILE,st.session_state.recipes)
-    safe_save_json(TAGS_FILE,st.session_state.tags)
+    safe_save_json(LOCAL_FILE,st.session_state.recipes)
+    safe_save_json(CACHE_FILE,conversion_cache)
+
+if not st.session_state.recipes:
+    st.session_state.recipes=load_db()
 
 # ---------- STYLE ----------
 st.markdown("""
@@ -48,27 +63,17 @@ st.markdown("""
 
 header{visibility:hidden;}
 
-[data-testid="stAppViewContainer"]{
-animation:fadein 0.6s ease;
-}
-
-@keyframes fadein{
-from{opacity:0; transform:translateY(10px)}
-to{opacity:1; transform:translateY(0)}
-}
-
 body,[data-testid="stAppViewContainer"]{
 background:radial-gradient(circle at bottom,#000428,#004e92);
 color:white;
 }
 
 .title{
-font-size:30px;
+font-size:24px;
 text-align:center;
 color:#00ccff;
-margin-bottom:12px;
+margin-bottom:10px;
 font-weight:700;
-letter-spacing:.5px;
 }
 
 .topbar{
@@ -77,66 +82,39 @@ top:0;
 z-index:999;
 background:#000428;
 padding-bottom:6px;
+border:none!important;
 }
 
-.topbuttons{display:flex;gap:6px;}
-.topbuttons button{
-font-size:14px!important;
-padding:4px 12px!important;
-border-radius:8px!important;
-transition:all .15s ease!important;
+button{
+border-radius:10px!important;
+transition:.15s;
 }
-
-.topbuttons button:hover{
-transform:scale(1.08);
-}
+button:hover{transform:scale(1.05)}
 
 .ingredients p{
 margin:0;
-padding:0;
 line-height:1.05;
 font-size:15px;
 }
 
 [data-testid="stExpander"]{
-border-radius:14px!important;
-overflow:hidden!important;
-transition:all .25s ease;
-border:1px solid rgba(255,255,255,.05)!important;
-}
-
-[data-testid="stExpander"]:hover{
-transform:scale(1.01);
-box-shadow:0 0 18px rgba(0,0,0,.35);
-}
-
-button[kind="secondary"]{
-border-radius:10px!important;
-transition:.15s;
-}
-button[kind="secondary"]:hover{
-transform:scale(1.05);
-}
-
-.tag{
-display:inline-block;
-padding:3px 8px;
-border-radius:8px;
-font-size:13px;
-margin-right:4px;
-margin-bottom:3px;
-font-weight:500;
+border:none!important;
+box-shadow:none!important;
 }
 
 </style>
 """,unsafe_allow_html=True)
 
-# ---------- TOP ----------
-st.markdown('<div class="topbar"><div class="topbuttons">',unsafe_allow_html=True)
-c1,c2=st.columns([1,1])
-c1.button("➕",on_click=lambda:st.session_state.update({"show_new":not st.session_state.show_new}))
-c2.button("🔍",on_click=lambda:st.session_state.update({"show_search":not st.session_state.show_search}))
-st.markdown("</div></div>",unsafe_allow_html=True)
+# ---------- TOP BAR ----------
+st.markdown('<div class="topbar">',unsafe_allow_html=True)
+c1,c2,c3=st.columns([1,1,2])
+with c1:
+    st.button("➕",on_click=lambda:st.session_state.update({"show_new":not st.session_state.show_new}))
+with c2:
+    st.button("🔍",on_click=lambda:st.session_state.update({"show_search":not st.session_state.show_search}))
+with c3:
+    st.button("💾 Uložit",on_click=save_db)
+st.markdown("</div>",unsafe_allow_html=True)
 
 st.markdown('<div class="title">Márova kuchařka</div>',unsafe_allow_html=True)
 
@@ -145,149 +123,100 @@ search=""
 if st.session_state.show_search:
     search=st.text_input("Hledat").lower()
 
-# ---------- FILTER TAG ----------
-tags=list(st.session_state.tags.keys())
-selected_tag=st.selectbox("Filtrovat štítek",["Vše"]+tags)
-
-# ---------- UNITS ----------
-unit_mode=st.selectbox("Jednotky",["Původní","Gramy","Mililitry"])
-
+# ---------- CONVERSION ----------
 unit_map={"ml":1,"l":1000,"g":1,"kg":1000,"lžíce":15,"lžička":5,"hrnek":240,"cup":240}
-density_db={"voda":1,"mléko":1.03,"olej":0.92,"med":1.42,"mouka":0.53,"cukr":0.85,"sůl":1.2}
+density={"voda":1,"mléko":1.03,"olej":0.92,"med":1.42}
 ignore_units=["ks","kus","vejce","špetka","trochu"]
 
-def normalize_unit(u):
-    if not u:return u
-    u=u.lower()
-    return {"hrnky":"hrnek","hrnku":"hrnek","lžičky":"lžička","lžiček":"lžička","lžící":"lžíce"}.get(u,u)
-
 def parse_qty(q):
-    q=q.replace(",",".")
-    try:return float(sum(Fraction(x) for x in q.split()))
+    try:return float(sum(Fraction(x) for x in q.replace(",",".").split()))
     except:
         try:return float(q)
         except:return None
 
-def clean(x):
-    return int(x) if x==int(x) else round(x,2)
-
-def find_density(name):
-    name=name.lower()
-    for k,v in density_db.items():
-        if k in name:return v
-    return 1
-
-def convert_line(line,scale):
+def convert_line(line):
     line=line.strip()
     m=re.match(r"([\d\/\.,\s]+)\s*([^\d\s]+)?\s*(.*)",line)
     if not m:return line
     qty,unit,name=m.groups()
     val=parse_qty(qty)
     if val is None:return line
-    val*=scale
-    unit=normalize_unit(unit)
+    if unit and unit.lower() in ignore_units:return line
+    coef=unit_map.get((unit or "").lower(),1)
+    coef*=density.get(name.lower().strip(),1)
+    if coef==1:return line
+    return f"{round(val*coef)} g {name.strip()}"
 
-    if unit_mode=="Původní" or unit in ignore_units:
-        return f"{clean(val)} {unit or ''} {name}".strip()
+def convert_text(t):
+    return "\n".join(convert_line(l) for l in t.splitlines() if l.strip())
 
-    coef=unit_map.get(unit)
-    if not coef:return f"{clean(val)} {unit or ''} {name}".strip()
+# ---------- NEW ----------
+if st.session_state.show_new:
+    st.markdown("### Nový recept")
+    n=st.text_input("Název")
+    typ=st.radio("Typ",["sladké","slané"],horizontal=True)
+    por=st.number_input("Porce",1,20,4)
+    ing=st.text_area("Ingredience")
+    steps=st.text_area("Postup")
 
-    ml=val*coef
-    if unit_mode=="Mililitry":
-        return f"{clean(ml)} ml {name}"
+    def save_new():
+        st.session_state.recipes.insert(0,{
+            "id":new_id(),
+            "name":n or "Bez názvu",
+            "type":typ,
+            "portions":por,
+            "ingredients":convert_text(ing),
+            "steps":steps,
+            "fav":False
+        })
+        save_db()
+        st.session_state.show_new=False
+        st.rerun()
 
-    g=ml*find_density(name)
-    return f"{clean(g)} g {name}"
+    st.button("Uložit recept",on_click=save_new)
 
-def convert_text(text,scale):
-    return "\n".join(convert_line(l,scale) for l in text.splitlines() if l.strip())
+# ---------- SORT ----------
+recipes_sorted=sorted(st.session_state.recipes,key=lambda x:(not x.get("fav",False),x["name"]))
 
-def split_ingredients(text):
-    text=text.replace(",",".")
-    parts=re.split(r'(?<!\d),(?!\d)|\s+a\s+', text)
-    return "\n".join(p.strip() for p in parts if p.strip())
+# ---------- DISPLAY ----------
+for r in recipes_sorted:
 
-# ---------- FORM ----------
-def recipe_form(r=None):
+    text=(r["name"]+r["ingredients"]+r["type"]).lower()
+    if search and search not in text:
+        continue
 
-    if r:
-        n=r["name"]; por=r["portions"]; ing=r["ingredients"]; steps=r["steps"]; sel=r.get("tags",[])
-        st.subheader("Upravit recept")
-    else:
-        n=""; por=4; ing=""; steps=""; sel=[]
-        st.subheader("Nový recept")
+    title=("⭐ "+r["name"]) if r.get("fav") else r["name"]
 
-    n=st.text_input("Název",n)
-    por=st.number_input("Porce",1,20,por)
-    ing=st.text_area("Ingredience",ing)
-    steps=st.text_area("Postup",steps)
+    with st.expander(title):
 
-    sel=st.multiselect("Štítky",list(st.session_state.tags.keys()),default=sel)
+        if st.session_state.edit_id==r["id"]:
+            en=st.text_input("Název",r["name"])
+            et=st.radio("Typ",["sladké","slané"],index=0 if r["type"]=="sladké" else 1)
+            ep=st.number_input("Porce",1,20,r["portions"])
+            ei=st.text_area("Ingredience",r["ingredients"])
+            es=st.text_area("Postup",r["steps"])
 
-    with st.expander("Nový štítek"):
-        name=st.text_input("Název")
-        col=st.color_picker("Barva","#AAAAAA")
-        if st.button("Přidat štítek"):
-            if name and name not in st.session_state.tags:
-                st.session_state.tags[name]=col
+            def save_edit(r=r):
+                r.update({"name":en,"type":et,"portions":ep,"ingredients":convert_text(ei),"steps":es})
+                st.session_state.edit_id=None
                 save_db()
                 st.rerun()
 
-    if st.button("Uložit recept"):
-        data={"id":r["id"] if r else new_id(),"name":n or "Bez názvu","portions":por,
-              "ingredients":split_ingredients(ing),"steps":steps,"tags":sel,
-              "last":r.get("last",0) if r else 0}
-
-        if r:
-            idx=[i for i,x in enumerate(st.session_state.recipes) if x["id"]==r["id"]][0]
-            st.session_state.recipes[idx]=data
-        else:
-            st.session_state.recipes.insert(0,data)
-
-        save_db()
-        st.session_state.edit_id=None
-        st.rerun()
-
-# ---------- SORT ----------
-st.session_state.recipes=sorted(st.session_state.recipes,key=lambda x:x.get("last",0),reverse=True)
-
-# ---------- SHOW ----------
-for r in st.session_state.recipes:
-
-    if selected_tag!="Vše" and selected_tag not in r.get("tags",[]):continue
-    if search:
-        text=(r["name"]+" "+r["ingredients"]).lower()
-        if search not in text:continue
-
-    with st.expander(r["name"]):
-
-        r["last"]=time.time()
-        save_db()
-
-        if st.session_state.edit_id==r["id"]:
-            recipe_form(r)
+            st.button("💾 uložit změny",on_click=save_edit)
 
         else:
-            newp=st.number_input("Porce",1,50,r["portions"],key="p"+r["id"])
-            scale=newp/r["portions"]
-
-            line=""
-            for t in r.get("tags",[]):
-                color=st.session_state.tags.get(t,"#ccc")
-                line+=f'<span class="tag" style="background:{color}">{t}</span>'
-            if line:st.markdown(line,unsafe_allow_html=True)
-
             st.markdown("**Ingredience**")
             html="<div class='ingredients'>"
-            for l in convert_text(r["ingredients"],scale).splitlines():
+            for l in r["ingredients"].splitlines():
                 html+=f"<p>• {l}</p>"
             html+="</div>"
             st.markdown(html,unsafe_allow_html=True)
 
             st.markdown("**Postup**")
-            st.write(r["steps"])
+            for l in r["steps"].splitlines():
+                st.markdown(l)
 
-            c1,c2=st.columns(2)
-            c1.button("✏️ Upravit",key="e"+r["id"],on_click=lambda r=r:st.session_state.update({"edit_id":r["id"]}))
-            c2.button("🗑 Smazat",key="d"+r["id"],on_click=lambda r=r:[st.session_state.recipes.remove(r),save_db(),st.rerun()])
+            c1,c2,c3=st.columns(3)
+            c1.button("⭐",key=r["id"]+"f",on_click=lambda r=r:[r.update({"fav":not r["fav"]}),save_db(),st.rerun()])
+            c2.button("✏️",key=r["id"]+"e",on_click=lambda r=r:st.session_state.update({"edit_id":r["id"]}))
+            c3.button("🗑",key=r["id"]+"d",on_click=lambda r=r:[st.session_state.recipes.remove(r),save_db(),st.rerun()])
