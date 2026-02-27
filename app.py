@@ -18,10 +18,7 @@ def init_connection():
         "https://www.googleapis.com/auth/drive"
     ]
     
-    # Načte JSON a povolí případné "Entery" v textu
     s_creds = json.loads(st.secrets["google_json"], strict=False)
-    
-    # Oprava zalomení řádků v klíči
     s_creds["private_key"] = s_creds["private_key"].replace("\\n", "\n")
     
     creds = Credentials.from_service_account_info(s_creds, scopes=scopes)
@@ -29,7 +26,6 @@ def init_connection():
     
     sheet = client.open("Moje Kuchařka").sheet1
     
-    # Vytvoří hlavičky, pokud je tabulka prázdná
     if not sheet.row_values(1):
         headers = ["id", "name", "type", "portions", "ingredients", "steps", "fav"]
         sheet.append_row(headers)
@@ -161,7 +157,7 @@ if st.session_state.show_search:
     filter_type = st.radio("Zobrazit:", ["Vše", "Slané", "Sladké"], horizontal=True)
     st.divider()
 
-# ---------- CONVERSION (Zobrazování) ----------
+# ---------- CONVERSION (Zobrazování & Přepočet porcí) ----------
 unit_map = {"ml":1, "l":1000, "g":1, "kg":1000, "lžíce":15, "lžička":5, "hrnek":240, "cup":240}
 density = {"voda":1, "mléko":1.03, "olej":0.92, "med":1.42}
 ignore_units = ["ks", "kus", "vejce", "špetka", "trochu"]
@@ -172,21 +168,34 @@ def parse_qty(q):
         try: return float(q)
         except Exception: return None
 
-def convert_line(line):
+def convert_line(line, multiplier=1.0):
     line = line.strip()
     m = re.match(r"([\d\/\.,\s]+)\s*([^\d\s]+)?\s*(.*)", line)
     if not m: return line
     qty, unit, name = m.groups()
     val = parse_qty(qty)
     if val is None: return line
-    if unit and unit.lower() in ignore_units: return line
+    
+    # Aplikace přepočtu podle porcí
+    val = val * multiplier
+    
+    # Pomocná funkce pro oříznutí desetinných míst, pokud je to celé číslo
+    def fmt(v): return int(v) if v == int(v) else round(v, 1)
+
+    if unit and unit.lower() in ignore_units: 
+        return f"**{fmt(val)} {unit}** {name}"
+        
     coef = unit_map.get((unit or "").lower(), 1)
     coef *= density.get(name.lower().strip(), 1)
-    if coef == 1: return line
-    return f"**{round(val*coef)} g** {name.strip()} *(původně: {line})*"
+    
+    if coef == 1: 
+        unit_str = f" {unit}" if unit else ""
+        return f"**{fmt(val)}{unit_str}** {name}"
+        
+    return f"**{fmt(val*coef)} g** {name.strip()} *(původně: {line})*"
 
-def convert_text(t):
-    return "\n".join(convert_line(l) for l in t.splitlines() if l.strip())
+def convert_text(t, multiplier=1.0):
+    return "\n".join(convert_line(l, multiplier) for l in t.splitlines() if l.strip())
 
 # ---------- ACTION HANDLERS ----------
 def toggle_fav(recipe):
@@ -216,15 +225,11 @@ if st.session_state.show_new:
 
     def process_ai_response(response_text):
         try:
-            # Očistíme text od markdown značek
             clean_text = response_text.replace("```json", "").replace("```", "").strip()
             data = json.loads(clean_text)
-            
-            # OPRAVA: Pokud AI vrátila recept v seznamu [ {} ], vytáhneme ho
             if isinstance(data, list):
                 if len(data) > 0: data = data[0]
                 else: return None
-            
             return data
         except Exception as e:
             st.error(f"Nepodařilo se zpracovat odpověď od AI. Detail: {e}")
@@ -232,7 +237,6 @@ if st.session_state.show_new:
 
     tab1, tab2, tab3 = st.tabs(["✍️ Ručně", "🔗 Z odkazu", "📸 Z fotky"])
 
-    # --- ZÁLOŽKA 1: RUČNÍ ZADÁNÍ ---
     with tab1:
         with st.form("new_recipe_form_manual", clear_on_submit=True):
             n = st.text_input("Název")
@@ -251,7 +255,6 @@ if st.session_state.show_new:
                 st.session_state.show_new = False
                 st.rerun()
 
-    # --- ZÁLOŽKA 2: Z ODKAZU ---
     with tab2:
         if not ai_ready:
             st.warning("Nastav 'gemini_api_key' v Secrets.")
@@ -282,7 +285,6 @@ if st.session_state.show_new:
                         except Exception as e:
                             st.error(f"Chyba při stahování: {e}")
 
-    # --- ZÁLOŽKA 3: Z FOTKY / SCREENSHOTU ---
     with tab3:
         if not ai_ready:
             st.warning("Nastav 'gemini_api_key' v Secrets.")
@@ -316,12 +318,11 @@ recipes_sorted = sorted(
 
 # ---------- DISPLAY ----------
 for r in recipes_sorted:
-    # 1. Textové filtrování
+    # Filtrování
     text = (r.get("name","") + r.get("ingredients","") + r.get("type","")).lower()
     if search and search not in text:
         continue
         
-    # 2. Filtr Slané/Sladké
     if filter_type != "Vše":
         if r.get("type", "").lower() != filter_type.lower():
             continue
@@ -352,9 +353,25 @@ for r in recipes_sorted:
                 st.rerun()
 
         else:
+            # PŘEPOČET PORCÍ
+            orig_portions = int(r.get("portions", 4))
+            if orig_portions < 1: orig_portions = 1
+            
+            c_port, _ = st.columns([2, 3])
+            with c_port:
+                target_portions = st.number_input(
+                    "👩‍🍳 Pro kolik lidí vaříš?", 
+                    min_value=1, max_value=50, 
+                    value=orig_portions, 
+                    key=f"port_{r['id']}"
+                )
+            
+            # Násobič pro suroviny
+            multiplier = target_portions / orig_portions
+
             st.markdown("**Ingredience:**")
             html = "<div class='ingredients'>"
-            for l in convert_text(r.get("ingredients", "")).splitlines():
+            for l in convert_text(r.get("ingredients", ""), multiplier).splitlines():
                 html += f"<p>• {l}</p>"
             html += "</div><br>"
             st.markdown(html, unsafe_allow_html=True)
@@ -362,6 +379,22 @@ for r in recipes_sorted:
             st.markdown("**Postup:**")
             for l in r.get("steps", "").splitlines():
                 if l.strip(): st.markdown(l)
+
+            # --- EXPORT / SDÍLENÍ ---
+            export_text = f"🍳 {r.get('name', '').upper()}\n"
+            export_text += f"🥘 Porce: {target_portions}\n\n"
+            export_text += "🛒 Ingredience:\n"
+            for l in convert_text(r.get("ingredients", ""), multiplier).splitlines():
+                # Očistíme od Markdown hvězdiček, aby to v textu vypadalo čistě
+                clean_l = l.replace("**", "")
+                export_text += f"• {clean_l}\n"
+            export_text += "\n👨‍🍳 Postup:\n"
+            for l in r.get("steps", "").splitlines():
+                if l.strip(): export_text += f"{l}\n"
+
+            with st.expander("📤 Sdílet / Kopírovat recept"):
+                st.info("Kliknutím na ikonu v pravém horním rohu rámečku zkopíruješ text.")
+                st.code(export_text, language="markdown")
 
             st.divider()
             c1, c2, c3 = st.columns(3)
