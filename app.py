@@ -8,7 +8,9 @@ import google.generativeai as genai
 from bs4 import BeautifulSoup
 from PIL import Image
 
-st.set_page_config(page_title="Márova kuchařka", page_icon="🍳", layout="centered")
+# Načtení vlastní ikony
+ikona_aplikace = Image.open("ikona.png")
+st.set_page_config(page_title="Márova kuchařka", page_icon=ikona_aplikace, layout="centered")
 
 # ---------- GOOGLE SHEETS PŘIPOJENÍ ----------
 @st.cache_resource
