@@ -152,10 +152,14 @@ st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown('<div class="title">Márova kuchařka</div>', unsafe_allow_html=True)
 
-# ---------- SEARCH ----------
+# ---------- SEARCH & FILTER ----------
 search = ""
+filter_type = "Vše"
+
 if st.session_state.show_search:
     search = st.text_input("Hledat recept podle názvu nebo ingredience:").lower()
+    filter_type = st.radio("Zobrazit:", ["Vše", "Slané", "Sladké"], horizontal=True)
+    st.divider()
 
 # ---------- CONVERSION (Zobrazování) ----------
 unit_map = {"ml":1, "l":1000, "g":1, "kg":1000, "lžíce":15, "lžička":5, "hrnek":240, "cup":240}
@@ -312,9 +316,15 @@ recipes_sorted = sorted(
 
 # ---------- DISPLAY ----------
 for r in recipes_sorted:
+    # 1. Textové filtrování
     text = (r.get("name","") + r.get("ingredients","") + r.get("type","")).lower()
     if search and search not in text:
         continue
+        
+    # 2. Filtr Slané/Sladké
+    if filter_type != "Vše":
+        if r.get("type", "").lower() != filter_type.lower():
+            continue
 
     title = ("⭐ " + r.get("name", "")) if r.get("fav") else r.get("name", "")
 
