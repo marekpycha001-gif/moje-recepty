@@ -139,11 +139,15 @@ button:hover {transform: scale(1.05)}
 
 # ---------- TOP UI ----------
 st.markdown('<div class="topbar">', unsafe_allow_html=True)
-c1, c2, c3 = st.columns([1, 1, 4])
+c1, c2, c3, c4 = st.columns([1, 1, 1, 3])
 with c1:
     if st.button("➕ Nový"): st.session_state.show_new = not st.session_state.show_new
 with c2:
     if st.button("🔍 Hledat"): st.session_state.show_search = not st.session_state.show_search
+with c3:
+    if st.button("🔄 Obnovit"): 
+        st.session_state.recipes = load_db()
+        st.rerun()
 st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown('<div class="title">Márova kuchařka</div>', unsafe_allow_html=True)
@@ -176,10 +180,8 @@ def convert_line(line, multiplier=1.0):
     val = parse_qty(qty)
     if val is None: return line
     
-    # Aplikace přepočtu podle porcí
     val = val * multiplier
     
-    # Pomocná funkce pro oříznutí desetinných míst, pokud je to celé číslo
     def fmt(v): return int(v) if v == int(v) else round(v, 1)
 
     if unit and unit.lower() in ignore_units: 
@@ -293,7 +295,10 @@ if st.session_state.show_new:
             if uploaded_file and st.button("🪄 Přečíst z obrázku"):
                 with st.spinner("AI studuje obrázek..."):
                     try:
+                        # TADY JE TA POJISTKA PRO ZMENŠENÍ FOTEK
                         img = Image.open(uploaded_file)
+                        img.thumbnail((1500, 1500)) 
+                        
                         response = ai_model.generate_content(
                             [system_prompt, img],
                             generation_config={"response_mime_type": "application/json"}
@@ -318,7 +323,6 @@ recipes_sorted = sorted(
 
 # ---------- DISPLAY ----------
 for r in recipes_sorted:
-    # Filtrování
     text = (r.get("name","") + r.get("ingredients","") + r.get("type","")).lower()
     if search and search not in text:
         continue
@@ -353,7 +357,6 @@ for r in recipes_sorted:
                 st.rerun()
 
         else:
-            # PŘEPOČET PORCÍ
             orig_portions = int(r.get("portions", 4))
             if orig_portions < 1: orig_portions = 1
             
@@ -366,7 +369,6 @@ for r in recipes_sorted:
                     key=f"port_{r['id']}"
                 )
             
-            # Násobič pro suroviny
             multiplier = target_portions / orig_portions
 
             st.markdown("**Ingredience:**")
@@ -380,12 +382,10 @@ for r in recipes_sorted:
             for l in r.get("steps", "").splitlines():
                 if l.strip(): st.markdown(l)
 
-            # --- EXPORT / SDÍLENÍ ---
             export_text = f"🍳 {r.get('name', '').upper()}\n"
             export_text += f"🥘 Porce: {target_portions}\n\n"
             export_text += "🛒 Ingredience:\n"
             for l in convert_text(r.get("ingredients", ""), multiplier).splitlines():
-                # Očistíme od Markdown hvězdiček, aby to v textu vypadalo čistě
                 clean_l = l.replace("**", "")
                 export_text += f"• {clean_l}\n"
             export_text += "\n👨‍🍳 Postup:\n"
