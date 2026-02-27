@@ -200,7 +200,7 @@ if st.session_state.show_new:
     ai_ready = "gemini_api_key" in st.secrets
     if ai_ready:
         genai.configure(api_key=st.secrets["gemini_api_key"])
-        ai_model = genai.GenerativeModel('gemini-2.0-flash')
+        ai_model = genai.GenerativeModel('gemini-2.5-flash')
     
     system_prompt = """Jsi expert na extrakci receptů. Z poskytnutého textu nebo obrázku vytáhni recept.
     Vrať výsledek POUZE jako validní JSON formát s těmito přesnými klíči:
