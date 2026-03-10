@@ -444,4 +444,79 @@ for r in recipes_sorted:
                 es = st.text_area("Postup", r.get("steps", ""))
 
                 if st.form_submit_button("💾 Uložit"):
-                    r.update({"name":
+                    r.update({"name": en, "type": et, "portions": ep, "ingredients": ei, "steps": es,
+                              "calories": ecal, "protein": epro, "carbs": ecar, "fat": efat})
+                    api_update(r["id"], r)
+                    st.session_state[edit_key] = False
+                    st.rerun()
+                    
+            if st.button("❌ Zrušit", key=f"cancel_{r['id']}"):
+                st.session_state[edit_key] = False
+                st.rerun()
+
+        else:
+            orig_portions = int(r.get("portions", 4))
+            if orig_portions < 1: orig_portions = 1
+            
+            # Zobrazení nutričních hodnot, pokud existují
+            kcal = int(r.get("calories", 0))
+            pro = int(r.get("protein", 0))
+            car = int(r.get("carbs", 0))
+            fat = int(r.get("fat", 0))
+            
+            if kcal > 0 or pro > 0 or car > 0 or fat > 0:
+                st.markdown(f"<div class='macros'><b>📊 Hodnoty na 1 porci:</b> 🔥 {kcal} kcal | 🥩 Bílkoviny: {pro} g | 🍞 Sacharidy: {car} g | 🧈 Tuky: {fat} g</div>", unsafe_allow_html=True)
+
+            c_port, _ = st.columns([2, 3])
+            with c_port:
+                target_portions = st.number_input(
+                    "👩‍🍳 Pro kolik lidí vaříš?", 
+                    min_value=1, max_value=50, 
+                    value=orig_portions, 
+                    key=f"port_{r['id']}"
+                )
+            
+            multiplier = target_portions / orig_portions
+
+            st.markdown("**Ingredience:**")
+            html = "<div class='ingredients'>"
+            for l in convert_text(r.get("ingredients", ""), multiplier).splitlines():
+                html += f"<p>• {l}</p>"
+            html += "</div><br>"
+            st.markdown(html, unsafe_allow_html=True)
+
+            st.markdown("**Postup:**")
+            for l in r.get("steps", "").splitlines():
+                if l.strip(): st.markdown(l)
+
+            # Sdílecí text nyní obsahuje i nutriční hodnoty
+            export_text = f"🍳 {r.get('name', '').upper()}\n"
+            if kcal > 0:
+                export_text += f"📊 1 porce: {kcal} kcal | {pro}g B | {car}g S | {fat}g T\n"
+            export_text += f"🥘 Porce: {target_portions}\n\n"
+            export_text += "🛒 Ingredience:\n"
+            for l in convert_text(r.get("ingredients", ""), multiplier).splitlines():
+                export_text += f"• {l}\n"
+            export_text += "\n👨‍🍳 Postup:\n"
+            for l in r.get("steps", "").splitlines():
+                if l.strip(): export_text += f"{l}\n"
+
+            with st.expander("📤 Sdílet / Kopírovat recept"):
+                st.info("Kliknutím na ikonu v pravém horním rohu rámečku zkopíruješ text.")
+                st.code(export_text, language="markdown")
+
+            st.divider()
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                fav_label = "Odstranit z oblíbených" if r.get("fav") else "⭐ Přidat do oblíbených"
+                if st.button(fav_label, key=r["id"]+"f"):
+                    toggle_fav(r)
+                    st.rerun()
+            with c2:
+                if st.button("✏️ Upravit", key=r["id"]+"e"):
+                    st.session_state[edit_key] = True
+                    st.rerun()
+            with c3:
+                if st.button("🗑 Smazat", key=r["id"]+"d"):
+                    delete_recipe(r)
+                    st.rerun()
