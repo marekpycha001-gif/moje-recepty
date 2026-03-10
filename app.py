@@ -33,7 +33,6 @@ def init_connection():
     
     expected_headers = ["id", "name", "type", "portions", "ingredients", "steps", "fav", "calories", "protein", "carbs", "fat"]
     
-    # Samooprava hlaviček v tabulce pro nová makra
     current_headers = sheet.row_values(1)
     if not current_headers:
         sheet.append_row(expected_headers)
@@ -41,7 +40,6 @@ def init_connection():
         try:
             sheet.update("A1:K1", [expected_headers])
         except Exception as e:
-            # Fallback pro starší verze gspread
             sheet.update(range_name="A1:K1", values=[expected_headers])
         
     return sheet
@@ -75,21 +73,14 @@ def load_db():
 def api_add(recipe):
     try:
         row = [
-            recipe.get("id", ""),
-            recipe.get("name", ""),
-            recipe.get("type", ""),
-            recipe.get("portions", ""),
-            recipe.get("ingredients", ""),
-            recipe.get("steps", ""),
-            str(recipe.get("fav", False)),
-            recipe.get("calories", 0),
-            recipe.get("protein", 0),
-            recipe.get("carbs", 0),
-            recipe.get("fat", 0)
+            recipe.get("id", ""), recipe.get("name", ""), recipe.get("type", ""),
+            recipe.get("portions", ""), recipe.get("ingredients", ""), recipe.get("steps", ""),
+            str(recipe.get("fav", False)), recipe.get("calories", 0),
+            recipe.get("protein", 0), recipe.get("carbs", 0), recipe.get("fat", 0)
         ]
         sheet.append_row(row)
     except Exception as e: 
-        st.error(f"Chyba při ukládání do tabulky: {e}")
+        st.error(f"Chyba při ukládání: {e}")
 
 def api_update(recipe_id, updated_data):
     try:
@@ -97,37 +88,43 @@ def api_update(recipe_id, updated_data):
         if cell:
             row_idx = cell.row
             row_data = [
-                updated_data.get("id", recipe_id),
-                updated_data.get("name", ""),
-                updated_data.get("type", ""),
-                updated_data.get("portions", ""),
-                updated_data.get("ingredients", ""),
-                updated_data.get("steps", ""),
-                str(updated_data.get("fav", False)),
-                updated_data.get("calories", 0),
-                updated_data.get("protein", 0),
-                updated_data.get("carbs", 0),
-                updated_data.get("fat", 0)
+                updated_data.get("id", recipe_id), updated_data.get("name", ""),
+                updated_data.get("type", ""), updated_data.get("portions", ""),
+                updated_data.get("ingredients", ""), updated_data.get("steps", ""),
+                str(updated_data.get("fav", False)), updated_data.get("calories", 0),
+                updated_data.get("protein", 0), updated_data.get("carbs", 0), updated_data.get("fat", 0)
             ]
-            try:
-                sheet.update(f"A{row_idx}:K{row_idx}", [row_data])
-            except:
-                sheet.update(range_name=f"A{row_idx}:K{row_idx}", values=[row_data])
+            try: sheet.update(f"A{row_idx}:K{row_idx}", [row_data])
+            except: sheet.update(range_name=f"A{row_idx}:K{row_idx}", values=[row_data])
     except Exception as e:
         st.error(f"Chyba při úpravě receptu: {e}")
 
 def api_delete(recipe_id):
     try:
         cell = sheet.find(recipe_id, in_column=1)
-        if cell:
-            sheet.delete_rows(cell.row)
+        if cell: sheet.delete_rows(cell.row)
     except Exception as e:
         st.error(f"Chyba při mazání receptu: {e}")
 
-# ---------- INITIALIZATION ----------
-if "recipes" not in st.session_state:
-    st.session_state.recipes = load_db()
+# ---------- POMOCNÁ FUNKCE PRO DOPLNĚNÍ MAKER ----------
+def get_macros_only(ingredients, portions, api_key):
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-2.5-flash')
+        prompt = f"""Odhadni nutriční hodnoty na 1 porci. Recept je celkem pro {portions} porcí.
+        Vrať POUZE validní JSON formát (klíče anglicky, hodnoty celá čísla):
+        {{"calories": 0, "protein": 0, "carbs": 0, "fat": 0}}
+        Ingredience:
+        {ingredients}"""
+        res = model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
+        text = res.text.replace("```json", "").replace("```", "").strip()
+        return json.loads(text)
+    except Exception as e:
+        st.error(f"Nepodařilo se spočítat makra: {e}")
+        return None
 
+# ---------- INITIALIZATION ----------
+if "recipes" not in st.session_state: st.session_state.recipes = load_db()
 if "show_new" not in st.session_state: st.session_state.show_new = False
 if "show_search" not in st.session_state: st.session_state.show_search = False
 
@@ -141,36 +138,17 @@ body, [data-testid="stAppViewContainer"] {
     color: white;
 }
 .title {
-    font-size: 28px;
-    text-align: center;
-    color: #00ccff;
-    margin-bottom: 20px;
-    font-weight: 700;
+    font-size: 28px; text-align: center; color: #00ccff; margin-bottom: 20px; font-weight: 700;
 }
-.topbar {
-    display: flex;
-    justify-content: flex-start;
-    gap: 10px;
-    margin-bottom: 15px;
-}
-button {
-    border-radius: 10px !important;
-    transition: .15s;
-}
+.topbar { display: flex; justify-content: flex-start; gap: 10px; margin-bottom: 15px; }
+button { border-radius: 10px !important; transition: .15s; }
 button:hover {transform: scale(1.05)}
-.ingredients p {
-    margin: 0;
-    line-height: 1.2;
-    font-size: 15px;
-}
+.ingredients p { margin: 0; line-height: 1.2; font-size: 15px; }
 .macros {
-    background: rgba(0, 204, 255, 0.1);
-    padding: 10px;
-    border-radius: 8px;
-    margin-bottom: 15px;
-    font-size: 14px;
-    border: 1px solid rgba(0, 204, 255, 0.3);
+    background: rgba(0, 204, 255, 0.1); padding: 10px; border-radius: 8px;
+    margin-bottom: 15px; font-size: 14px; border: 1px solid rgba(0, 204, 255, 0.3);
 }
+.calc-btn { margin-bottom: 10px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -186,7 +164,6 @@ with c3:
         st.session_state.recipes = load_db()
         st.rerun()
 st.markdown("</div>", unsafe_allow_html=True)
-
 st.markdown('<div class="title">Márova kuchařka</div>', unsafe_allow_html=True)
 
 # ---------- SEARCH & FILTER ----------
@@ -210,50 +187,36 @@ def convert_line(line, multiplier=1.0):
     m = re.match(r"^([\d\/\.,\s]+)\s*(.*)", line)
     if not m: return line
     qty_str, rest = m.groups()
-    
     val = parse_qty(qty_str)
     if val is None: return line
-    
     val = val * multiplier
     def fmt(v): return int(v) if v == int(v) else round(v, 1)
 
     rest_lower = rest.lower()
-    
     ignore_patterns = ["ks", "kus", "kusů", "kusy", "vejce", "špetka", "špetku", "špetky", "trochu", "balení", "bal", "plechovka", "plechovky"]
     for ig in ignore_patterns:
-        if rest_lower.startswith(ig):
-            return f"{fmt(val)} {ig} {rest[len(ig):].strip()}"
+        if rest_lower.startswith(ig): return f"{fmt(val)} {ig} {rest[len(ig):].strip()}"
             
-    coef = 1
-    is_vol = False
-    unit_matched = ""
-    
+    coef = 1; is_vol = False; unit_matched = ""
     vol_units = {
-        r"^(hrnku|hrnek|hrnky|hrnků|cup)\b": 240,
-        r"^(lžička|lžičky|lžičku|lžiček|čl|č\.l\.)\b": 5,
+        r"^(hrnku|hrnek|hrnky|hrnků|cup)\b": 240, r"^(lžička|lžičky|lžičku|lžiček|čl|č\.l\.)\b": 5,
         r"^(lžíce|lžíci|lžic|pl|p\.l\.|polévková lžíce|polévkové lžíce)\b": 15,
-        r"^(kg|kilo|kila|kilogram|kilogramů)\b": 1000,
-        r"^(l|litr|litru|litrů|litry)\b": 1000,
-        r"^(dkg|deka)\b": 10,
-        r"^(g|gram|gramů|gramy|ml|mililitr|mililitrů)\b": 1
+        r"^(kg|kilo|kila|kilogram|kilogramů)\b": 1000, r"^(l|litr|litru|litrů|litry)\b": 1000,
+        r"^(dkg|deka)\b": 10, r"^(g|gram|gramů|gramy|ml|mililitr|mililitrů)\b": 1
     }
     
     for pat, mult in vol_units.items():
         match = re.search(pat, rest_lower)
         if match:
-            unit_matched = match.group(0)
-            coef = mult
+            unit_matched = match.group(0); coef = mult
             if mult in [5, 15, 240]: is_vol = True
             break
             
-    if not unit_matched:
-        return f"{fmt(val)} {rest}"
-        
+    if not unit_matched: return f"{fmt(val)} {rest}"
     name = rest[len(unit_matched):].strip()
     name_lower = name.lower()
     
-    if coef == 1 and not is_vol:
-        return f"{fmt(val)} {unit_matched} {name}"
+    if coef == 1 and not is_vol: return f"{fmt(val)} {unit_matched} {name}"
         
     dens = 1.0
     if is_vol:
@@ -279,7 +242,6 @@ def convert_text(t, multiplier=1.0):
 def toggle_fav(recipe):
     recipe["fav"] = not recipe.get("fav", False)
     api_update(recipe["id"], {"fav": recipe["fav"]})
-
 def delete_recipe(recipe):
     st.session_state.recipes.remove(recipe)
     api_delete(recipe["id"])
@@ -287,24 +249,15 @@ def delete_recipe(recipe):
 # ---------- NEW RECIPE FORM (AI ENHANCED) ----------
 if st.session_state.show_new:
     st.markdown("### 📝 Nový recept")
-    
     ai_ready = "gemini_api_key" in st.secrets
     if ai_ready:
         genai.configure(api_key=st.secrets["gemini_api_key"])
         ai_model = genai.GenerativeModel('gemini-2.5-flash')
     
-    # NOVÝ AI PROMPT PRO VÝPOČET MAKER
-    system_prompt = """Jsi expert na extrakci receptů a výživu. Z poskytnutého textu nebo obrázku vytáhni recept.
-    Vrať výsledek POUZE jako validní JSON formát s těmito přesnými klíči:
-    "name" (text, název jídla),
-    "type" (text, přesně buď "slané" nebo "sladké"),
-    "portions" (číslo, odhadni porce, výchozí 4),
-    "ingredients" (text, každá surovina na nový řádek),
-    "steps" (text, očíslované kroky přípravy, každý na nový řádek),
-    "calories" (celé číslo, odhad kalorií v kcal na 1 porci),
-    "protein" (celé číslo, odhad bílkovin v gramech na 1 porci),
-    "carbs" (celé číslo, odhad sacharidů v gramech na 1 porci),
-    "fat" (celé číslo, odhad tuků v gramech na 1 porci)."""
+    system_prompt = """Jsi expert na extrakci receptů a výživu. Z textu/obrázku vytáhni recept.
+    Vrať POUZE validní JSON formát s klíči: "name", "type" ("slané"/"sladké"), "portions" (výchozí 4),
+    "ingredients" (text, řádky), "steps" (text, řádky), "calories" (celé číslo na 1 porci),
+    "protein" (celé číslo, 1 porce), "carbs" (celé číslo, 1 porce), "fat" (celé číslo, 1 porce)."""
 
     def process_ai_response(response_text):
         try:
@@ -315,7 +268,7 @@ if st.session_state.show_new:
                 else: return None
             return data
         except Exception as e:
-            st.error(f"Nepodařilo se zpracovat odpověď od AI. Detail: {e}")
+            st.error(f"Nepodařilo se zpracovat odpověď od AI: {e}")
             return None
 
     tab1, tab2, tab3 = st.tabs(["✍️ Ručně", "🔗 Z odkazu", "📸 Z fotky"])
@@ -325,14 +278,12 @@ if st.session_state.show_new:
             n = st.text_input("Název")
             typ = st.radio("Typ", ["slané", "sladké"], horizontal=True)
             por = st.number_input("Porce", 1, 20, 4)
-            
-            st.markdown("**Nutriční hodnoty na 1 porci (volitelné):**")
+            st.markdown("**Nutriční hodnoty na 1 porci:**")
             m_col1, m_col2, m_col3, m_col4 = st.columns(4)
             cal_in = m_col1.number_input("Kcal", 0, 5000, 0)
-            pro_in = m_col2.number_input("Bílkoviny (g)", 0, 500, 0)
-            car_in = m_col3.number_input("Sacharidy (g)", 0, 500, 0)
-            fat_in = m_col4.number_input("Tuky (g)", 0, 500, 0)
-            
+            pro_in = m_col2.number_input("Bílkoviny", 0, 500, 0)
+            car_in = m_col3.number_input("Sacharidy", 0, 500, 0)
+            fat_in = m_col4.number_input("Tuky", 0, 500, 0)
             ing = st.text_area("Ingredience (co řádek, to položka)")
             steps = st.text_area("Postup")
             
@@ -348,8 +299,7 @@ if st.session_state.show_new:
                 st.rerun()
 
     with tab2:
-        if not ai_ready:
-            st.warning("Nastav 'gemini_api_key' v Secrets.")
+        if not ai_ready: st.warning("Nastav 'gemini_api_key' v Secrets.")
         else:
             url_input = st.text_input("Vlož URL adresu receptu:")
             if st.button("🪄 Vytěžit recept z webu"):
@@ -360,13 +310,11 @@ if st.session_state.show_new:
                             res = requests.get(url_input, headers=headers, timeout=10)
                             soup = BeautifulSoup(res.content, 'html.parser')
                             raw_text = soup.get_text(separator='\n', strip=True)
-                            
                             response = ai_model.generate_content(
                                 f"{system_prompt}\n\nZde je text z webu:\n{raw_text}",
                                 generation_config={"response_mime_type": "application/json"}
                             )
                             parsed_data = process_ai_response(response.text)
-                            
                             if parsed_data:
                                 parsed_data["id"] = new_id()
                                 parsed_data["fav"] = False
@@ -374,12 +322,10 @@ if st.session_state.show_new:
                                 api_add(parsed_data)
                                 st.session_state.show_new = False
                                 st.rerun()
-                        except Exception as e:
-                            st.error(f"Chyba při stahování: {e}")
+                        except Exception as e: st.error(f"Chyba při stahování: {e}")
 
     with tab3:
-        if not ai_ready:
-            st.warning("Nastav 'gemini_api_key' v Secrets.")
+        if not ai_ready: st.warning("Nastav 'gemini_api_key' v Secrets.")
         else:
             uploaded_file = st.file_uploader("Nahrát obrázek", type=["png", "jpg", "jpeg", "webp"])
             if uploaded_file and st.button("🪄 Přečíst z obrázku"):
@@ -387,13 +333,11 @@ if st.session_state.show_new:
                     try:
                         img = Image.open(uploaded_file)
                         img.thumbnail((1500, 1500)) 
-                        
                         response = ai_model.generate_content(
                             [system_prompt, img],
                             generation_config={"response_mime_type": "application/json"}
                         )
                         parsed_data = process_ai_response(response.text)
-                        
                         if parsed_data:
                             parsed_data["id"] = new_id()
                             parsed_data["fav"] = False
@@ -401,44 +345,56 @@ if st.session_state.show_new:
                             api_add(parsed_data)
                             st.session_state.show_new = False
                             st.rerun()
-                    except Exception as e:
-                        st.error(f"Chyba při čtení obrázku: {e}")
+                    except Exception as e: st.error(f"Chyba při čtení obrázku: {e}")
 
 # ---------- SORT ----------
-recipes_sorted = sorted(
-    st.session_state.recipes,
-    key=lambda x: (not x.get("fav", False), x.get("name", ""))
-)
+recipes_sorted = sorted(st.session_state.recipes, key=lambda x: (not x.get("fav", False), x.get("name", "")))
 
 # ---------- DISPLAY ----------
 for r in recipes_sorted:
     text = (r.get("name","") + r.get("ingredients","") + r.get("type","")).lower()
-    if search and search not in text:
-        continue
-        
+    if search and search not in text: continue
     if filter_type != "Vše":
-        if r.get("type", "").lower() != filter_type.lower():
-            continue
+        if r.get("type", "").lower() != filter_type.lower(): continue
 
     title = ("⭐ " + r.get("name", "")) if r.get("fav") else r.get("name", "")
 
     with st.expander(title):
         edit_key = f"edit_{r['id']}"
-        if edit_key not in st.session_state:
-            st.session_state[edit_key] = False
+        if edit_key not in st.session_state: st.session_state[edit_key] = False
 
         if st.session_state[edit_key]:
+            
+            # --- TLAČÍTKO PRO DOPOČÍTÁNÍ MAKER PŘES AI ---
+            if "gemini_api_key" in st.secrets:
+                if st.button("🪄 Spočítat makra pomocí AI", key=f"ai_mac_{r['id']}"):
+                    with st.spinner("AI studuje ingredience..."):
+                        macs = get_macros_only(r.get("ingredients", ""), r.get("portions", 4), st.secrets["gemini_api_key"])
+                        if macs:
+                            st.session_state[f"cal_{r['id']}"] = macs.get("calories", 0)
+                            st.session_state[f"pro_{r['id']}"] = macs.get("protein", 0)
+                            st.session_state[f"car_{r['id']}"] = macs.get("carbs", 0)
+                            st.session_state[f"fat_{r['id']}"] = macs.get("fat", 0)
+                            st.rerun()
+
             with st.form(f"form_{r['id']}"):
                 en = st.text_input("Název", r.get("name", ""))
                 et = st.radio("Typ", ["sladké", "slané"], index=0 if r.get("type")=="sladké" else 1)
                 ep = st.number_input("Porce", 1, 20, int(r.get("portions", 4)))
                 
                 st.markdown("**Nutriční hodnoty (na 1 porci):**")
+                
+                # Zjištění, zda už máme spočítáno z AI nebo bereme stará data z databáze
+                def_cal = st.session_state.get(f"cal_{r['id']}", int(r.get("calories", 0)))
+                def_pro = st.session_state.get(f"pro_{r['id']}", int(r.get("protein", 0)))
+                def_car = st.session_state.get(f"car_{r['id']}", int(r.get("carbs", 0)))
+                def_fat = st.session_state.get(f"fat_{r['id']}", int(r.get("fat", 0)))
+
                 ec1, ec2, ec3, ec4 = st.columns(4)
-                ecal = ec1.number_input("Kcal", 0, 5000, int(r.get("calories", 0)))
-                epro = ec2.number_input("Bílkoviny", 0, 500, int(r.get("protein", 0)))
-                ecar = ec3.number_input("Sacharidy", 0, 500, int(r.get("carbs", 0)))
-                efat = ec4.number_input("Tuky", 0, 500, int(r.get("fat", 0)))
+                ecal = ec1.number_input("Kcal", 0, 5000, def_cal)
+                epro = ec2.number_input("Bílkoviny", 0, 500, def_pro)
+                ecar = ec3.number_input("Sacharidy", 0, 500, def_car)
+                efat = ec4.number_input("Tuky", 0, 500, def_fat)
                 
                 ei = st.text_area("Ingredience", r.get("ingredients", ""))
                 es = st.text_area("Postup", r.get("steps", ""))
@@ -458,7 +414,6 @@ for r in recipes_sorted:
             orig_portions = int(r.get("portions", 4))
             if orig_portions < 1: orig_portions = 1
             
-            # Zobrazení nutričních hodnot, pokud existují
             kcal = int(r.get("calories", 0))
             pro = int(r.get("protein", 0))
             car = int(r.get("carbs", 0))
@@ -469,13 +424,7 @@ for r in recipes_sorted:
 
             c_port, _ = st.columns([2, 3])
             with c_port:
-                target_portions = st.number_input(
-                    "👩‍🍳 Pro kolik lidí vaříš?", 
-                    min_value=1, max_value=50, 
-                    value=orig_portions, 
-                    key=f"port_{r['id']}"
-                )
-            
+                target_portions = st.number_input("👩‍🍳 Pro kolik lidí vaříš?", min_value=1, max_value=50, value=orig_portions, key=f"port_{r['id']}")
             multiplier = target_portions / orig_portions
 
             st.markdown("**Ingredience:**")
@@ -489,12 +438,9 @@ for r in recipes_sorted:
             for l in r.get("steps", "").splitlines():
                 if l.strip(): st.markdown(l)
 
-            # Sdílecí text nyní obsahuje i nutriční hodnoty
             export_text = f"🍳 {r.get('name', '').upper()}\n"
-            if kcal > 0:
-                export_text += f"📊 1 porce: {kcal} kcal | {pro}g B | {car}g S | {fat}g T\n"
-            export_text += f"🥘 Porce: {target_portions}\n\n"
-            export_text += "🛒 Ingredience:\n"
+            if kcal > 0: export_text += f"📊 1 porce: {kcal} kcal | {pro}g B | {car}g S | {fat}g T\n"
+            export_text += f"🥘 Porce: {target_portions}\n\n🛒 Ingredience:\n"
             for l in convert_text(r.get("ingredients", ""), multiplier).splitlines():
                 export_text += f"• {l}\n"
             export_text += "\n👨‍🍳 Postup:\n"
