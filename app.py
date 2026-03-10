@@ -106,23 +106,6 @@ def api_delete(recipe_id):
     except Exception as e:
         st.error(f"Chyba při mazání receptu: {e}")
 
-# ---------- POMOCNÁ FUNKCE PRO DOPLNĚNÍ MAKER ----------
-def get_macros_only(ingredients, portions, api_key):
-    try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.5-flash')
-        prompt = f"""Odhadni nutriční hodnoty na 1 porci. Recept je celkem pro {portions} porcí.
-        Vrať POUZE validní JSON formát (klíče anglicky, hodnoty celá čísla):
-        {{"calories": 0, "protein": 0, "carbs": 0, "fat": 0}}
-        Ingredience:
-        {ingredients}"""
-        res = model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
-        text = res.text.replace("```json", "").replace("```", "").strip()
-        return json.loads(text)
-    except Exception as e:
-        st.error(f"Nepodařilo se spočítat makra: {e}")
-        return None
-
 # ---------- INITIALIZATION ----------
 if "recipes" not in st.session_state: st.session_state.recipes = load_db()
 if "show_new" not in st.session_state: st.session_state.show_new = False
@@ -148,7 +131,6 @@ button:hover {transform: scale(1.05)}
     background: rgba(0, 204, 255, 0.1); padding: 10px; border-radius: 8px;
     margin-bottom: 15px; font-size: 14px; border: 1px solid rgba(0, 204, 255, 0.3);
 }
-.calc-btn { margin-bottom: 10px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -364,37 +346,17 @@ for r in recipes_sorted:
         if edit_key not in st.session_state: st.session_state[edit_key] = False
 
         if st.session_state[edit_key]:
-            
-            # --- TLAČÍTKO PRO DOPOČÍTÁNÍ MAKER PŘES AI ---
-            if "gemini_api_key" in st.secrets:
-                if st.button("🪄 Spočítat makra pomocí AI", key=f"ai_mac_{r['id']}"):
-                    with st.spinner("AI studuje ingredience..."):
-                        macs = get_macros_only(r.get("ingredients", ""), r.get("portions", 4), st.secrets["gemini_api_key"])
-                        if macs:
-                            st.session_state[f"cal_{r['id']}"] = macs.get("calories", 0)
-                            st.session_state[f"pro_{r['id']}"] = macs.get("protein", 0)
-                            st.session_state[f"car_{r['id']}"] = macs.get("carbs", 0)
-                            st.session_state[f"fat_{r['id']}"] = macs.get("fat", 0)
-                            st.rerun()
-
             with st.form(f"form_{r['id']}"):
                 en = st.text_input("Název", r.get("name", ""))
                 et = st.radio("Typ", ["sladké", "slané"], index=0 if r.get("type")=="sladké" else 1)
                 ep = st.number_input("Porce", 1, 20, int(r.get("portions", 4)))
                 
                 st.markdown("**Nutriční hodnoty (na 1 porci):**")
-                
-                # Zjištění, zda už máme spočítáno z AI nebo bereme stará data z databáze
-                def_cal = st.session_state.get(f"cal_{r['id']}", int(r.get("calories", 0)))
-                def_pro = st.session_state.get(f"pro_{r['id']}", int(r.get("protein", 0)))
-                def_car = st.session_state.get(f"car_{r['id']}", int(r.get("carbs", 0)))
-                def_fat = st.session_state.get(f"fat_{r['id']}", int(r.get("fat", 0)))
-
                 ec1, ec2, ec3, ec4 = st.columns(4)
-                ecal = ec1.number_input("Kcal", 0, 5000, def_cal)
-                epro = ec2.number_input("Bílkoviny", 0, 500, def_pro)
-                ecar = ec3.number_input("Sacharidy", 0, 500, def_car)
-                efat = ec4.number_input("Tuky", 0, 500, def_fat)
+                ecal = ec1.number_input("Kcal", 0, 5000, int(r.get("calories", 0)))
+                epro = ec2.number_input("Bílkoviny", 0, 500, int(r.get("protein", 0)))
+                ecar = ec3.number_input("Sacharidy", 0, 500, int(r.get("carbs", 0)))
+                efat = ec4.number_input("Tuky", 0, 500, int(r.get("fat", 0)))
                 
                 ei = st.text_area("Ingredience", r.get("ingredients", ""))
                 es = st.text_area("Postup", r.get("steps", ""))
