@@ -164,10 +164,6 @@ if st.session_state.show_search:
     st.divider()
 
 # ---------- CONVERSION (Zobrazování & Přepočet porcí) ----------
-unit_map = {"ml":1, "l":1000, "g":1, "kg":1000, "lžíce":15, "lžička":5, "hrnek":240, "cup":240}
-density = {"voda":1, "mléko":1.03, "olej":0.92, "med":1.42}
-ignore_units = ["ks", "kus", "vejce", "špetka", "trochu"]
-
 def parse_qty(q):
     try: return float(sum(Fraction(x) for x in q.replace(",",".").split()))
     except Exception:
@@ -176,27 +172,73 @@ def parse_qty(q):
 
 def convert_line(line, multiplier=1.0):
     line = line.strip()
-    m = re.match(r"([\d\/\.,\s]+)\s*([^\d\s]+)?\s*(.*)", line)
+    m = re.match(r"^([\d\/\.,\s]+)\s*(.*)", line)
     if not m: return line
-    qty, unit, name = m.groups()
-    val = parse_qty(qty)
+    qty_str, rest = m.groups()
+    
+    val = parse_qty(qty_str)
     if val is None: return line
     
     val = val * multiplier
-    
     def fmt(v): return int(v) if v == int(v) else round(v, 1)
 
-    if unit and unit.lower() in ignore_units: 
-        return f"**{fmt(val)} {unit}** {name}"
-        
-    coef = unit_map.get((unit or "").lower(), 1)
-    coef *= density.get(name.lower().strip(), 1)
+    rest_lower = rest.lower()
     
-    if coef == 1: 
-        unit_str = f" {unit}" if unit else ""
-        return f"**{fmt(val)}{unit_str}** {name}"
+    # Ignorované jednotky
+    ignore_patterns = ["ks", "kus", "kusů", "kusy", "vejce", "špetka", "špetku", "špetky", "trochu", "balení", "bal", "plechovka", "plechovky"]
+    for ig in ignore_patterns:
+        if rest_lower.startswith(ig):
+            return f"{fmt(val)} {ig} {rest[len(ig):].strip()}"
+            
+    coef = 1
+    is_vol = False
+    unit_matched = ""
+    
+    # Inteligentní slovník jednotek pro různé tvary (skloňování)
+    vol_units = {
+        r"^(hrnku|hrnek|hrnky|hrnků|cup)\b": 240,
+        r"^(lžička|lžičky|lžičku|lžiček|čl|č\.l\.)\b": 5,
+        r"^(lžíce|lžíci|lžic|pl|p\.l\.|polévková lžíce|polévkové lžíce)\b": 15,
+        r"^(kg|kilo|kila|kilogram|kilogramů)\b": 1000,
+        r"^(l|litr|litru|litrů|litry)\b": 1000,
+        r"^(dkg|deka)\b": 10,
+        r"^(g|gram|gramů|gramy|ml|mililitr|mililitrů)\b": 1
+    }
+    
+    for pat, mult in vol_units.items():
+        match = re.search(pat, rest_lower)
+        if match:
+            unit_matched = match.group(0)
+            coef = mult
+            if mult in [5, 15, 240]: is_vol = True
+            break
+            
+    if not unit_matched:
+        return f"{fmt(val)} {rest}"
         
-    return f"**{fmt(val*coef)} g** {name.strip()} *(původně: {line})*"
+    name = rest[len(unit_matched):].strip()
+    name_lower = name.lower()
+    
+    if coef == 1 and not is_vol:
+        return f"{fmt(val)} {unit_matched} {name}"
+        
+    # Hustota surovin (aby hrnky dávaly smysl na gramy)
+    dens = 1.0
+    if is_vol:
+        if "mouk" in name_lower: dens = 0.55
+        elif "cukr" in name_lower: dens = 0.85
+        elif "olej" in name_lower: dens = 0.92
+        elif "másl" in name_lower or "masl" in name_lower: dens = 0.95
+        elif "med" in name_lower: dens = 1.42
+        elif "kakao" in name_lower or "kakaa" in name_lower: dens = 0.4
+        elif "mlék" in name_lower or "mlek" in name_lower: dens = 1.03
+        elif "vloč" in name_lower: dens = 0.4
+        elif "rýž" in name_lower or "ryz" in name_lower: dens = 0.85
+
+    final_val = val * coef * dens
+    out_unit = "ml" if any(x in name_lower for x in ["vod", "mlék", "mlek", "olej", "smetan", "rum", "vín", "šťáv"]) else "g"
+
+    return f"{fmt(final_val)} {out_unit} {name} (původně: {line})"
 
 def convert_text(t, multiplier=1.0):
     return "\n".join(convert_line(l, multiplier) for l in t.splitlines() if l.strip())
@@ -297,7 +339,6 @@ if st.session_state.show_new:
             if uploaded_file and st.button("🪄 Přečíst z obrázku"):
                 with st.spinner("AI studuje obrázek..."):
                     try:
-                        # TADY JE TA POJISTKA PRO ZMENŠENÍ FOTEK
                         img = Image.open(uploaded_file)
                         img.thumbnail((1500, 1500)) 
                         
@@ -388,8 +429,7 @@ for r in recipes_sorted:
             export_text += f"🥘 Porce: {target_portions}\n\n"
             export_text += "🛒 Ingredience:\n"
             for l in convert_text(r.get("ingredients", ""), multiplier).splitlines():
-                clean_l = l.replace("**", "")
-                export_text += f"• {clean_l}\n"
+                export_text += f"• {l}\n"
             export_text += "\n👨‍🍳 Postup:\n"
             for l in r.get("steps", "").splitlines():
                 if l.strip(): export_text += f"{l}\n"
