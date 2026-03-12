@@ -179,43 +179,68 @@ def convert_line(line, multiplier=1.0):
     for ig in ignore_patterns:
         if rest_lower.startswith(ig): return f"{fmt(val)} {ig} {rest[len(ig):].strip()}"
             
-    coef = 1; is_vol = False; unit_matched = ""
+    is_vol = False
+    unit_matched = ""
+    coef = 1
+
+    # Objemové jednotky k převodu na gramy
     vol_units = {
         r"^(hrnku|hrnek|hrnky|hrnků|cup)\b": 240, r"^(lžička|lžičky|lžičku|lžiček|čl|č\.l\.)\b": 5,
         r"^(lžíce|lžíci|lžic|pl|p\.l\.|polévková lžíce|polévkové lžíce)\b": 15,
-        r"^(kg|kilo|kila|kilogram|kilogramů)\b": 1000, r"^(l|litr|litru|litrů|litry)\b": 1000,
-        r"^(dkg|deka)\b": 10, r"^(g|gram|gramů|gramy|ml|mililitr|mililitrů)\b": 1
+        r"^(l|litr|litru|litrů|litry)\b": 1000, r"^(dl|decilitr|decilitrů)\b": 100,
+        r"^(ml|mililitr|mililitrů)\b": 1
+    }
+    # Hmotnostní jednotky
+    mass_units = {
+        r"^(kg|kilo|kila|kilogram|kilogramů)\b": 1000, r"^(dkg|deka)\b": 10,
+        r"^(g|gram|gramů|gramy)\b": 1
     }
     
+    # Zjistíme, jestli to je objem nebo hmotnost
     for pat, mult in vol_units.items():
         match = re.search(pat, rest_lower)
         if match:
-            unit_matched = match.group(0); coef = mult
-            if mult in [5, 15, 240]: is_vol = True
+            unit_matched = match.group(0); coef = mult; is_vol = True
             break
             
+    if not unit_matched:
+        for pat, mult in mass_units.items():
+            match = re.search(pat, rest_lower)
+            if match:
+                unit_matched = match.group(0); coef = mult; is_vol = False
+                break
+                
     if not unit_matched: return f"{fmt(val)} {rest}"
+    
     name = rest[len(unit_matched):].strip()
     name_lower = name.lower()
     
-    if coef == 1 and not is_vol: return f"{fmt(val)} {unit_matched} {name}"
-        
-    dens = 1.0
+    # Převod všeho na GRAMY
     if is_vol:
+        dens = 1.0
+        # Orientacni hustoty v g/ml
         if "mouk" in name_lower: dens = 0.55
         elif "cukr" in name_lower: dens = 0.85
         elif "olej" in name_lower: dens = 0.92
         elif "másl" in name_lower or "masl" in name_lower: dens = 0.95
+        elif "sád" in name_lower or "sad" in name_lower: dens = 0.95
         elif "med" in name_lower: dens = 1.42
         elif "kakao" in name_lower or "kakaa" in name_lower: dens = 0.4
         elif "mlék" in name_lower or "mlek" in name_lower: dens = 1.03
+        elif "smetan" in name_lower: dens = 1.02
         elif "vloč" in name_lower: dens = 0.4
         elif "rýž" in name_lower or "ryz" in name_lower: dens = 0.85
+        elif "mák" in name_lower or "mak" in name_lower: dens = 0.65
+        elif "ořech" in name_lower or "orech" in name_lower: dens = 0.6
 
-    final_val = val * coef * dens
-    out_unit = "ml" if any(x in name_lower for x in ["vod", "mlék", "mlek", "olej", "smetan", "rum", "vín", "šťáv"]) else "g"
-
-    return f"{fmt(final_val)} {out_unit} {name} (původně: {line})"
+        final_g = val * coef * dens
+        return f"{fmt(final_g)} g {name} (původně: {line})"
+    else:
+        final_g = val * coef
+        if coef == 1 and multiplier == 1.0: # Už to bylo v gramech a nepřepočítává se počet porcí
+            return f"{fmt(final_g)} g {name}"
+        else: # Původně kg/dkg, nebo se to násobilo porcemi
+            return f"{fmt(final_g)} g {name} (původně: {line})"
 
 def convert_text(t, multiplier=1.0):
     return "\n".join(convert_line(l, multiplier) for l in str(t).splitlines() if l.strip())
@@ -345,7 +370,6 @@ recipes_sorted = sorted(st.session_state.recipes, key=lambda x: (not x.get("fav"
 
 # ---------- DISPLAY ----------
 for r in recipes_sorted:
-    # BEZPEČNOSTNÍ POJISTKA - str() zajistí, že to nikdy nespadne na TypeError
     text = (str(r.get("name","")) + str(r.get("ingredients","")) + str(r.get("type",""))).lower()
     
     if search and search not in text: continue
