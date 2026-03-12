@@ -218,7 +218,7 @@ def convert_line(line, multiplier=1.0):
     return f"{fmt(final_val)} {out_unit} {name} (původně: {line})"
 
 def convert_text(t, multiplier=1.0):
-    return "\n".join(convert_line(l, multiplier) for l in t.splitlines() if l.strip())
+    return "\n".join(convert_line(l, multiplier) for l in str(t).splitlines() if l.strip())
 
 # ---------- ACTION HANDLERS ----------
 def toggle_fav(recipe):
@@ -248,6 +248,17 @@ if st.session_state.show_new:
             if isinstance(data, list):
                 if len(data) > 0: data = data[0]
                 else: return None
+            
+            # BEZPEČNOSTNÍ POJISTKA - Převede případné seznamy a null hodnoty na text
+            for key in ["name", "type", "ingredients", "steps"]:
+                val = data.get(key)
+                if isinstance(val, list):
+                    data[key] = "\n".join(str(x) for x in val)
+                elif val is None:
+                    data[key] = ""
+                else:
+                    data[key] = str(val)
+
             return data
         except Exception as e:
             st.error(f"Nepodařilo se zpracovat odpověď od AI: {e}")
@@ -330,16 +341,18 @@ if st.session_state.show_new:
                     except Exception as e: st.error(f"Chyba při čtení obrázku: {e}")
 
 # ---------- SORT ----------
-recipes_sorted = sorted(st.session_state.recipes, key=lambda x: (not x.get("fav", False), x.get("name", "")))
+recipes_sorted = sorted(st.session_state.recipes, key=lambda x: (not x.get("fav", False), str(x.get("name", ""))))
 
 # ---------- DISPLAY ----------
 for r in recipes_sorted:
-    text = (r.get("name","") + r.get("ingredients","") + r.get("type","")).lower()
+    # BEZPEČNOSTNÍ POJISTKA - str() zajistí, že to nikdy nespadne na TypeError
+    text = (str(r.get("name","")) + str(r.get("ingredients","")) + str(r.get("type",""))).lower()
+    
     if search and search not in text: continue
     if filter_type != "Vše":
-        if r.get("type", "").lower() != filter_type.lower(): continue
+        if str(r.get("type", "")).lower() != filter_type.lower(): continue
 
-    title = ("⭐ " + r.get("name", "")) if r.get("fav") else r.get("name", "")
+    title = ("⭐ " + str(r.get("name", ""))) if r.get("fav") else str(r.get("name", ""))
 
     with st.expander(title):
         edit_key = f"edit_{r['id']}"
@@ -347,8 +360,8 @@ for r in recipes_sorted:
 
         if st.session_state[edit_key]:
             with st.form(f"form_{r['id']}"):
-                en = st.text_input("Název", r.get("name", ""))
-                et = st.radio("Typ", ["sladké", "slané"], index=0 if r.get("type")=="sladké" else 1)
+                en = st.text_input("Název", str(r.get("name", "")))
+                et = st.radio("Typ", ["sladké", "slané"], index=0 if str(r.get("type"))=="sladké" else 1)
                 ep = st.number_input("Porce", 1, 20, int(r.get("portions", 4)))
                 
                 st.markdown("**Nutriční hodnoty (na 1 porci):**")
@@ -358,8 +371,8 @@ for r in recipes_sorted:
                 ecar = ec3.number_input("Sacharidy", 0, 500, int(r.get("carbs", 0)))
                 efat = ec4.number_input("Tuky", 0, 500, int(r.get("fat", 0)))
                 
-                ei = st.text_area("Ingredience", r.get("ingredients", ""))
-                es = st.text_area("Postup", r.get("steps", ""))
+                ei = st.text_area("Ingredience", str(r.get("ingredients", "")))
+                es = st.text_area("Postup", str(r.get("steps", "")))
 
                 if st.form_submit_button("💾 Uložit"):
                     r.update({"name": en, "type": et, "portions": ep, "ingredients": ei, "steps": es,
@@ -391,22 +404,22 @@ for r in recipes_sorted:
 
             st.markdown("**Ingredience:**")
             html = "<div class='ingredients'>"
-            for l in convert_text(r.get("ingredients", ""), multiplier).splitlines():
+            for l in convert_text(str(r.get("ingredients", "")), multiplier).splitlines():
                 html += f"<p>• {l}</p>"
             html += "</div><br>"
             st.markdown(html, unsafe_allow_html=True)
 
             st.markdown("**Postup:**")
-            for l in r.get("steps", "").splitlines():
+            for l in str(r.get("steps", "")).splitlines():
                 if l.strip(): st.markdown(l)
 
-            export_text = f"🍳 {r.get('name', '').upper()}\n"
+            export_text = f"🍳 {str(r.get('name', '')).upper()}\n"
             if kcal > 0: export_text += f"📊 1 porce: {kcal} kcal | {pro}g B | {car}g S | {fat}g T\n"
             export_text += f"🥘 Porce: {target_portions}\n\n🛒 Ingredience:\n"
-            for l in convert_text(r.get("ingredients", ""), multiplier).splitlines():
+            for l in convert_text(str(r.get("ingredients", "")), multiplier).splitlines():
                 export_text += f"• {l}\n"
             export_text += "\n👨‍🍳 Postup:\n"
-            for l in r.get("steps", "").splitlines():
+            for l in str(r.get("steps", "")).splitlines():
                 if l.strip(): export_text += f"{l}\n"
 
             with st.expander("📤 Sdílet / Kopírovat recept"):
