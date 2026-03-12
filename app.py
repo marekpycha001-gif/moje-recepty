@@ -256,34 +256,36 @@ if st.session_state.show_new:
         genai.configure(api_key=st.secrets["gemini_api_key"])
         ai_model = genai.GenerativeModel('gemini-2.5-flash')
     
-    # NOVÝ, MNOHEM PŘÍSNĚJŠÍ PROMPT PRO AI
     system_prompt = """Jsi expert na extrakci receptů a výživu. Z textu nebo obrázku vytáhni recept.
-    Vrať POUZE validní a striktní JSON formát s těmito klíči:
+    Vrať POUZE validní JSON formát s těmito klíči:
     "name" (text),
     "type" ("slané" nebo "sladké"),
     "portions" (číslo),
-    "ingredients" (text, jednotlivé položky odděluj VÝHRADNĚ znakem '\\n'),
-    "steps" (text, kroky odděluj VÝHRADNĚ znakem '\\n'),
+    "ingredients" (text, řádky oddělené \n),
+    "steps" (text, řádky oddělené \n),
     "calories" (celé číslo na 1 porci),
     "protein" (celé číslo na 1 porci),
     "carbs" (celé číslo na 1 porci),
-    "fat" (celé číslo na 1 porci).
-    DŮLEŽITÉ UPOZORNĚNÍ: Uvnitř textových hodnot nesmí být žádné skutečné zalomení řádků (odřádkování), použij '\\n'. Všechny vnitřní uvozovky musí být escapované (\\")."""
+    "fat" (celé číslo na 1 porci)."""
 
     def process_ai_response(response_text):
         try:
-            # Očištění o balast, který AI občas přidává
-            clean_text = response_text.replace("```json", "").replace("```", "").strip()
-            # Nahrazení případných skutečných nových řádků uvnitř JSON stringu za escapované \n
-            clean_text = re.sub(r'(?<!\\)\n', r'\\n', clean_text)
-            # Čištění rozbitých uvozovek a struktury provedeme vrácením JSON bloků do kupy
-            clean_text = clean_text.replace('\\n{', '{').replace('}\\n', '}').replace('\\n"', '"').replace('"\\n', '"').replace(',\\n', ',').replace('\\n]', ']').replace('[\\n', '[')
-
-            data = json.loads(clean_text)
+            # NOVÁ CHYTRÁ EXTRKACE JSONU: Najde cokoliv mezi { a }
+            match = re.search(r'(\{.*\})|(\[.*\])', response_text, re.DOTALL)
+            if not match:
+                st.error("AI nevrátila data ve správném formátu.")
+                return None
+            
+            clean_text = match.group(0)
+            
+            # strict=False zajistí, že to spolkne i případné nečistoty od AI
+            data = json.loads(clean_text, strict=False)
+            
             if isinstance(data, list):
                 if len(data) > 0: data = data[0]
                 else: return None
             
+            # Převede seznamy (pokud je AI tvrdohlavě poslala) zpět na čistý text
             for key in ["name", "type", "ingredients", "steps"]:
                 val = data.get(key)
                 if isinstance(val, list):
@@ -291,13 +293,14 @@ if st.session_state.show_new:
                 elif val is None:
                     data[key] = ""
                 else:
-                    data[key] = str(val).replace("\\n", "\n")
+                    data[key] = str(val).strip()
 
             return data
         except Exception as e:
-            st.error(f"Nepodařilo se zpracovat odpověď od AI (Chyba formátu JSON): {e}")
-            # Pro ladění si můžeš vypsat i to, co AI vlastně poslala (odkomentováním dalšího řádku)
-            # st.write(response_text)
+            st.error(f"Nepodařilo se zpracovat odpověď od AI: {e}")
+            # Tohle vypíše, co přesně AI poslala, abys věděl, na čem to spadlo
+            with st.expander("Zobrazit raw odpověď AI (pro ladění)"):
+                st.code(response_text)
             return None
 
     tab1, tab2, tab3 = st.tabs(["✍️ Ručně", "🔗 Z odkazu", "📸 Z fotky"])
