@@ -176,7 +176,7 @@ if not st.session_state.show_search and not st.session_state.show_new:
             st.session_state.active_category = "vše"
             st.rerun()
             
-        st.stop()  # Aplikace zde zastaví vykreslování, aby neukázala celý seznam
+        st.stop()
     else:
         if st.session_state.active_category == "slané": cat_label = "Slané"
         elif st.session_state.active_category == "sladké": cat_label = "Sladké"
@@ -419,6 +419,11 @@ if st.session_state.show_new:
                             st.rerun()
                     except Exception as e: st.error(f"Chyba při čtení obrázku: {e}")
 
+# Definováni opravených klíčových slov
+kw_kynute = ["droždí", "drozdi", "kvasnic", "kvásek", "kvasku", "kvásku"]
+# Opravená klíčová slova pro maso (žádné 'mlet' nebo 'ryb')
+kw_maso = ["maso", "kuřec", "kurec", "hověz", "hovez", "vepř", "vepr", "mleté maso", "mlete maso", "slanina", "slaniny", "šunka", "sunka", "klobás", "klobas", "krůt", "krut", "kachn", "ryba", "ryby", "rybí", "párk", "parky"]
+
 # ---------- SORT ----------
 recipes_sorted = sorted(st.session_state.recipes, key=lambda x: (not x.get("fav", False), str(x.get("name", ""))))
 
@@ -432,10 +437,10 @@ for r in recipes_sorted:
     # 2. Filtr z vyhledávacího panelu (pokud se hledá)
     if st.session_state.show_search and filter_type != "Vše":
         if filter_type == "Kynuté":
-            is_kynute = any(kw in str(r.get("ingredients", "")).lower() for kw in ["droždí", "drozdi", "kvasnic", "kvásek", "kvasku", "kvásku"])
+            is_kynute = any(kw in str(r.get("ingredients", "")).lower() for kw in kw_kynute)
             if not is_kynute: continue
         elif filter_type == "Maso":
-            is_maso = any(kw in str(r.get("ingredients", "")).lower() for kw in ["maso", "kuřec", "kurec", "hověz", "hovez", "vepř", "vepr", "mlet", "slanina", "slaniny", "šunka", "sunka", "klobás", "klobas", "krůt", "krut", "kachn", "ryb"])
+            is_maso = any(kw in str(r.get("ingredients", "")).lower() for kw in kw_maso)
             if not is_maso: continue
         else:
             if str(r.get("type", "")).lower() != filter_type.lower(): continue
@@ -443,10 +448,10 @@ for r in recipes_sorted:
     # 3. Filtr z hlavního menu (pokud se nehledá)
     if not st.session_state.show_search and st.session_state.active_category in ["slané", "sladké", "kynuté", "maso"]:
         if st.session_state.active_category == "kynuté":
-            is_kynute = any(kw in str(r.get("ingredients", "")).lower() for kw in ["droždí", "drozdi", "kvasnic", "kvásek", "kvasku", "kvásku"])
+            is_kynute = any(kw in str(r.get("ingredients", "")).lower() for kw in kw_kynute)
             if not is_kynute: continue
         elif st.session_state.active_category == "maso":
-            is_maso = any(kw in str(r.get("ingredients", "")).lower() for kw in ["maso", "kuřec", "kurec", "hověz", "hovez", "vepř", "vepr", "mlet", "slanina", "slaniny", "šunka", "sunka", "klobás", "klobas", "krůt", "krut", "kachn", "ryb"])
+            is_maso = any(kw in str(r.get("ingredients", "")).lower() for kw in kw_maso)
             if not is_maso: continue
         else:
             if str(r.get("type", "")).lower() != st.session_state.active_category: continue
