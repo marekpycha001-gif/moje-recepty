@@ -270,22 +270,18 @@ if st.session_state.show_new:
 
     def process_ai_response(response_text):
         try:
-            # NOVÁ CHYTRÁ EXTRKACE JSONU: Najde cokoliv mezi { a }
             match = re.search(r'(\{.*\})|(\[.*\])', response_text, re.DOTALL)
             if not match:
                 st.error("AI nevrátila data ve správném formátu.")
                 return None
             
             clean_text = match.group(0)
-            
-            # strict=False zajistí, že to spolkne i případné nečistoty od AI
             data = json.loads(clean_text, strict=False)
             
             if isinstance(data, list):
                 if len(data) > 0: data = data[0]
                 else: return None
             
-            # Převede seznamy (pokud je AI tvrdohlavě poslala) zpět na čistý text
             for key in ["name", "type", "ingredients", "steps"]:
                 val = data.get(key)
                 if isinstance(val, list):
@@ -298,7 +294,6 @@ if st.session_state.show_new:
             return data
         except Exception as e:
             st.error(f"Nepodařilo se zpracovat odpověď od AI: {e}")
-            # Tohle vypíše, co přesně AI poslala, abys věděl, na čem to spadlo
             with st.expander("Zobrazit raw odpověď AI (pro ladění)"):
                 st.code(response_text)
             return None
@@ -309,26 +304,29 @@ if st.session_state.show_new:
         with st.form("new_recipe_form_manual", clear_on_submit=True):
             n = st.text_input("Název")
             typ = st.radio("Typ", ["slané", "sladké"], horizontal=True)
-            por = st.number_input("Porce", 1, 20, 4)
+            por = st.number_input("Porce", 1, 100, 4)
             st.markdown("**Nutriční hodnoty na 1 porci:**")
             m_col1, m_col2, m_col3, m_col4 = st.columns(4)
-            cal_in = m_col1.number_input("Kcal", 0, 5000, 0)
-            pro_in = m_col2.number_input("Bílkoviny", 0, 500, 0)
-            car_in = m_col3.number_input("Sacharidy", 0, 500, 0)
-            fat_in = m_col4.number_input("Tuky", 0, 500, 0)
+            cal_in = m_col1.number_input("Kcal", 0, 10000, 0)
+            pro_in = m_col2.number_input("Bílkoviny", 0, 5000, 0)
+            car_in = m_col3.number_input("Sacharidy", 0, 5000, 0)
+            fat_in = m_col4.number_input("Tuky", 0, 5000, 0)
             ing = st.text_area("Ingredience (co řádek, to položka)")
             steps = st.text_area("Postup")
             
             if st.form_submit_button("✅ Uložit recept"):
-                new_r = {
-                    "id": new_id(), "name": n or "Bez názvu", "type": typ,
-                    "portions": por, "ingredients": ing, "steps": steps, "fav": False,
-                    "calories": cal_in, "protein": pro_in, "carbs": car_in, "fat": fat_in
-                }
-                st.session_state.recipes.insert(0, new_r)
-                api_add(new_r)
-                st.session_state.show_new = False
-                st.rerun()
+                if not ing:
+                    st.warning("Musíš vyplnit alespoň ingredience!")
+                else:
+                    new_r = {
+                        "id": new_id(), "name": n or "Bez názvu", "type": typ,
+                        "portions": por, "ingredients": ing, "steps": steps, "fav": False,
+                        "calories": cal_in, "protein": pro_in, "carbs": car_in, "fat": fat_in
+                    }
+                    st.session_state.recipes.insert(0, new_r)
+                    api_add(new_r)
+                    st.session_state.show_new = False
+                    st.rerun()
 
     with tab2:
         if not ai_ready: st.warning("Nastav 'gemini_api_key' v Secrets.")
@@ -359,7 +357,7 @@ if st.session_state.show_new:
     with tab3:
         if not ai_ready: st.warning("Nastav 'gemini_api_key' v Secrets.")
         else:
-            uploaded_file = st.file_uploader("Nahrát obrázek", type=["png", "jpg", "jpeg", "webp"])
+            uploaded_file = st.file_uploader("Nahrát obrázek", type=["png", "jpg", "jpeg", "webp", "heic", "heif"])
             if uploaded_file and st.button("🪄 Přečíst z obrázku"):
                 with st.spinner("AI studuje obrázek a odhaduje makra..."):
                     try:
@@ -400,14 +398,23 @@ for r in recipes_sorted:
             with st.form(f"form_{r['id']}"):
                 en = st.text_input("Název", str(r.get("name", "")))
                 et = st.radio("Typ", ["sladké", "slané"], index=0 if str(r.get("type"))=="sladké" else 1)
-                ep = st.number_input("Porce", 1, 20, int(r.get("portions", 4)))
+                
+                # Bezpečnostní ošetření načítání hodnot z databáze
+                safe_portions = max(1, min(100, int(r.get("portions", 4))))
+                ep = st.number_input("Porce", 1, 100, safe_portions)
                 
                 st.markdown("**Nutriční hodnoty (na 1 porci):**")
                 ec1, ec2, ec3, ec4 = st.columns(4)
-                ecal = ec1.number_input("Kcal", 0, 5000, int(r.get("calories", 0)))
-                epro = ec2.number_input("Bílkoviny", 0, 500, int(r.get("protein", 0)))
-                ecar = ec3.number_input("Sacharidy", 0, 500, int(r.get("carbs", 0)))
-                efat = ec4.number_input("Tuky", 0, 500, int(r.get("fat", 0)))
+                
+                safe_kcal = max(0, min(10000, int(r.get("calories", 0))))
+                safe_pro = max(0, min(5000, int(r.get("protein", 0))))
+                safe_car = max(0, min(5000, int(r.get("carbs", 0))))
+                safe_fat = max(0, min(5000, int(r.get("fat", 0))))
+
+                ecal = ec1.number_input("Kcal", 0, 10000, safe_kcal)
+                epro = ec2.number_input("Bílkoviny", 0, 5000, safe_pro)
+                ecar = ec3.number_input("Sacharidy", 0, 5000, safe_car)
+                efat = ec4.number_input("Tuky", 0, 5000, safe_fat)
                 
                 ei = st.text_area("Ingredience", str(r.get("ingredients", "")))
                 es = st.text_area("Postup", str(r.get("steps", "")))
@@ -424,8 +431,7 @@ for r in recipes_sorted:
                 st.rerun()
 
         else:
-            orig_portions = int(r.get("portions", 4))
-            if orig_portions < 1: orig_portions = 1
+            orig_portions = max(1, int(r.get("portions", 4)))
             
             kcal = int(r.get("calories", 0))
             pro = int(r.get("protein", 0))
@@ -437,7 +443,8 @@ for r in recipes_sorted:
 
             c_port, _ = st.columns([2, 3])
             with c_port:
-                target_portions = st.number_input("👩‍🍳 Pro kolik lidí vaříš?", min_value=1, max_value=50, value=orig_portions, key=f"port_{r['id']}")
+                safe_target = max(1, min(100, orig_portions))
+                target_portions = st.number_input("👩‍🍳 Pro kolik lidí vaříš?", min_value=1, max_value=100, value=safe_target, key=f"port_{r['id']}")
             multiplier = target_portions / orig_portions
 
             st.markdown("**Ingredience:**")
@@ -464,18 +471,4 @@ for r in recipes_sorted:
                 st.info("Kliknutím na ikonu v pravém horním rohu rámečku zkopíruješ text.")
                 st.code(export_text, language="markdown")
 
-            st.divider()
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                fav_label = "Odstranit z oblíbených" if r.get("fav") else "⭐ Přidat do oblíbených"
-                if st.button(fav_label, key=r["id"]+"f"):
-                    toggle_fav(r)
-                    st.rerun()
-            with c2:
-                if st.button("✏️ Upravit", key=r["id"]+"e"):
-                    st.session_state[edit_key] = True
-                    st.rerun()
-            with c3:
-                if st.button("🗑 Smazat", key=r["id"]+"d"):
-                    delete_recipe(r)
-                    st.rerun()
+            st
