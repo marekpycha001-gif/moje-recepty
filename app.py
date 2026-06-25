@@ -524,7 +524,7 @@ for r in recipes_sorted:
                     st.checkbox(l.strip(), key=f"chk_step_{r['id']}_{idx}")
             st.write("")
 
-            export_text = f"🍳 {str(r.get('name', ''))).upper()}\n"
+            export_text = f"🍳 {str(r.get('name', '')).upper()}\n"
             if kcal > 0: export_text += f"📊 1 porce: {kcal} kcal | {pro}g B | {car}g S | {fat}g T\n"
             export_text += f"🥘 Porce: {target_portions}\n\n🛒 Ingredience:\n"
             for l in convert_text(str(r.get("ingredients", "")), multiplier).splitlines():
