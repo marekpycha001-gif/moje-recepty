@@ -471,4 +471,18 @@ for r in recipes_sorted:
                 st.info("Kliknutím na ikonu v pravém horním rohu rámečku zkopíruješ text.")
                 st.code(export_text, language="markdown")
 
-            st
+            st.divider()
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                fav_label = "Odstranit z oblíbených" if r.get("fav") else "⭐ Přidat do oblíbených"
+                if st.button(fav_label, key=r["id"]+"f"):
+                    toggle_fav(r)
+                    st.rerun()
+            with c2:
+                if st.button("✏️ Upravit", key=r["id"]+"e"):
+                    st.session_state[edit_key] = True
+                    st.rerun()
+            with c3:
+                if st.button("🗑 Smazat", key=r["id"]+"d"):
+                    delete_recipe(r)
+                    st.rerun()
