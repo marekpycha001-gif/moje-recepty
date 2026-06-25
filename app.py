@@ -153,7 +153,7 @@ st.markdown('<div class="title">Márova kuchařka</div>', unsafe_allow_html=True
 if not st.session_state.show_search and not st.session_state.show_new:
     if st.session_state.active_category is None:
         st.markdown("<h3 style='text-align: center; padding: 20px 0;'>Na co máš dneska chuť?</h3>", unsafe_allow_html=True)
-        rc1, rc2 = st.columns(2)
+        rc1, rc2, rc3 = st.columns(3)
         with rc1:
             if st.button("🧂 Slané", use_container_width=True):
                 st.session_state.active_category = "slané"
@@ -161,6 +161,10 @@ if not st.session_state.show_search and not st.session_state.show_new:
         with rc2:
             if st.button("🍰 Sladké", use_container_width=True):
                 st.session_state.active_category = "sladké"
+                st.rerun()
+        with rc3:
+            if st.button("🍞 Kynuté", use_container_width=True):
+                st.session_state.active_category = "kynuté"
                 st.rerun()
         
         st.write("")
@@ -170,7 +174,11 @@ if not st.session_state.show_search and not st.session_state.show_new:
             
         st.stop()  # Aplikace zde zastaví vykreslování, aby neukázala celý seznam
     else:
-        cat_label = "Slané" if st.session_state.active_category == "slané" else ("Sladké" if st.session_state.active_category == "sladké" else "Všechny recepty")
+        if st.session_state.active_category == "slané": cat_label = "Slané"
+        elif st.session_state.active_category == "sladké": cat_label = "Sladké"
+        elif st.session_state.active_category == "kynuté": cat_label = "Kynuté"
+        else: cat_label = "Všechny recepty"
+        
         st.markdown(f"<div style='text-align: center; margin-bottom: 15px;'><b>Kategorie: {cat_label}</b></div>", unsafe_allow_html=True)
         if st.button("🔙 Zpět na výběr kategorií", use_container_width=True):
             st.session_state.active_category = None
@@ -183,7 +191,7 @@ filter_type = "Vše"
 
 if st.session_state.show_search:
     search = st.text_input("Hledat recept podle názvu nebo ingredience:").lower()
-    filter_type = st.radio("Zobrazit:", ["Vše", "Slané", "Sladké"], horizontal=True)
+    filter_type = st.radio("Zobrazit:", ["Vše", "Slané", "Sladké", "Kynuté"], horizontal=True)
     st.divider()
 
 # ---------- CONVERSION (Zobrazování & Přepočet porcí) ----------
@@ -413,14 +421,24 @@ recipes_sorted = sorted(st.session_state.recipes, key=lambda x: (not x.get("fav"
 for r in recipes_sorted:
     text = (str(r.get("name","")) + str(r.get("ingredients","")) + str(r.get("type",""))).lower()
     
+    # 1. Globální hledání textu
     if search and search not in text: continue
-    if filter_type != "Vše":
-        if str(r.get("type", "")).lower() != filter_type.lower(): continue
+    
+    # 2. Filtr z vyhledávacího panelu (pokud se hledá)
+    if st.session_state.show_search and filter_type != "Vše":
+        if filter_type == "Kynuté":
+            is_kynute = any(kw in str(r.get("ingredients", "")).lower() for kw in ["droždí", "drozdi", "kvasnic", "kvásek", "kvasku", "kvásku"])
+            if not is_kynute: continue
+        else:
+            if str(r.get("type", "")).lower() != filter_type.lower(): continue
 
-    # Filtrování podle hlavního menu (pokud se zrovna nehledá)
-    if not st.session_state.show_search and st.session_state.active_category in ["slané", "sladké"]:
-        if str(r.get("type", "")).lower() != st.session_state.active_category:
-            continue
+    # 3. Filtr z hlavního menu (pokud se nehledá)
+    if not st.session_state.show_search and st.session_state.active_category in ["slané", "sladké", "kynuté"]:
+        if st.session_state.active_category == "kynuté":
+            is_kynute = any(kw in str(r.get("ingredients", "")).lower() for kw in ["droždí", "drozdi", "kvasnic", "kvásek", "kvasku", "kvásku"])
+            if not is_kynute: continue
+        else:
+            if str(r.get("type", "")).lower() != st.session_state.active_category: continue
 
     title = ("⭐ " + str(r.get("name", ""))) if r.get("fav") else str(r.get("name", ""))
 
