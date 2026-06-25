@@ -153,7 +153,7 @@ st.markdown('<div class="title">Márova kuchařka</div>', unsafe_allow_html=True
 if not st.session_state.show_search and not st.session_state.show_new:
     if st.session_state.active_category is None:
         st.markdown("<h3 style='text-align: center; padding: 20px 0;'>Na co máš dneska chuť?</h3>", unsafe_allow_html=True)
-        rc1, rc2, rc3 = st.columns(3)
+        rc1, rc2, rc3, rc4 = st.columns(4)
         with rc1:
             if st.button("🧂 Slané", use_container_width=True):
                 st.session_state.active_category = "slané"
@@ -166,6 +166,10 @@ if not st.session_state.show_search and not st.session_state.show_new:
             if st.button("🍞 Kynuté", use_container_width=True):
                 st.session_state.active_category = "kynuté"
                 st.rerun()
+        with rc4:
+            if st.button("🥩 Maso", use_container_width=True):
+                st.session_state.active_category = "maso"
+                st.rerun()
         
         st.write("")
         if st.button("📖 Zobrazit všechny recepty", use_container_width=True):
@@ -177,6 +181,7 @@ if not st.session_state.show_search and not st.session_state.show_new:
         if st.session_state.active_category == "slané": cat_label = "Slané"
         elif st.session_state.active_category == "sladké": cat_label = "Sladké"
         elif st.session_state.active_category == "kynuté": cat_label = "Kynuté"
+        elif st.session_state.active_category == "maso": cat_label = "Maso"
         else: cat_label = "Všechny recepty"
         
         st.markdown(f"<div style='text-align: center; margin-bottom: 15px;'><b>Kategorie: {cat_label}</b></div>", unsafe_allow_html=True)
@@ -191,7 +196,7 @@ filter_type = "Vše"
 
 if st.session_state.show_search:
     search = st.text_input("Hledat recept podle názvu nebo ingredience:").lower()
-    filter_type = st.radio("Zobrazit:", ["Vše", "Slané", "Sladké", "Kynuté"], horizontal=True)
+    filter_type = st.radio("Zobrazit:", ["Vše", "Slané", "Sladké", "Kynuté", "Maso"], horizontal=True)
     st.divider()
 
 # ---------- CONVERSION (Zobrazování & Přepočet porcí) ----------
@@ -429,14 +434,20 @@ for r in recipes_sorted:
         if filter_type == "Kynuté":
             is_kynute = any(kw in str(r.get("ingredients", "")).lower() for kw in ["droždí", "drozdi", "kvasnic", "kvásek", "kvasku", "kvásku"])
             if not is_kynute: continue
+        elif filter_type == "Maso":
+            is_maso = any(kw in str(r.get("ingredients", "")).lower() for kw in ["maso", "kuřec", "kurec", "hověz", "hovez", "vepř", "vepr", "mlet", "slanina", "slaniny", "šunka", "sunka", "klobás", "klobas", "krůt", "krut", "kachn", "ryb"])
+            if not is_maso: continue
         else:
             if str(r.get("type", "")).lower() != filter_type.lower(): continue
 
     # 3. Filtr z hlavního menu (pokud se nehledá)
-    if not st.session_state.show_search and st.session_state.active_category in ["slané", "sladké", "kynuté"]:
+    if not st.session_state.show_search and st.session_state.active_category in ["slané", "sladké", "kynuté", "maso"]:
         if st.session_state.active_category == "kynuté":
             is_kynute = any(kw in str(r.get("ingredients", "")).lower() for kw in ["droždí", "drozdi", "kvasnic", "kvásek", "kvasku", "kvásku"])
             if not is_kynute: continue
+        elif st.session_state.active_category == "maso":
+            is_maso = any(kw in str(r.get("ingredients", "")).lower() for kw in ["maso", "kuřec", "kurec", "hověz", "hovez", "vepř", "vepr", "mlet", "slanina", "slaniny", "šunka", "sunka", "klobás", "klobas", "krůt", "krut", "kachn", "ryb"])
+            if not is_maso: continue
         else:
             if str(r.get("type", "")).lower() != st.session_state.active_category: continue
 
@@ -513,7 +524,7 @@ for r in recipes_sorted:
                     st.checkbox(l.strip(), key=f"chk_step_{r['id']}_{idx}")
             st.write("")
 
-            export_text = f"🍳 {str(r.get('name', '')).upper()}\n"
+            export_text = f"🍳 {str(r.get('name', ''))).upper()}\n"
             if kcal > 0: export_text += f"📊 1 porce: {kcal} kcal | {pro}g B | {car}g S | {fat}g T\n"
             export_text += f"🥘 Porce: {target_portions}\n\n🛒 Ingredience:\n"
             for l in convert_text(str(r.get("ingredients", "")), multiplier).splitlines():
