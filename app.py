@@ -175,7 +175,13 @@ def convert_line(line, multiplier=1.0):
     def fmt(v): return int(v) if v == int(v) else round(v, 1)
 
     rest_lower = rest.lower()
-    ignore_patterns = ["ks", "kus", "kusů", "kusy", "vejce", "špetka", "špetku", "špetky", "trochu", "balení", "bal", "plechovka", "plechovky"]
+    
+    # Rozděleno na kratší kousky
+    ignore_patterns = [
+        "ks", "kus", "kusů", "kusy", "vejce", "špetka", 
+        "špetku", "špetky", "trochu", "balení", "bal", 
+        "plechovka", "plechovky"
+    ]
     for ig in ignore_patterns:
         if rest_lower.startswith(ig): return f"{fmt(val)} {ig} {rest[len(ig):].strip()}"
             
@@ -183,6 +189,318 @@ def convert_line(line, multiplier=1.0):
     unit_matched = ""
     coef = 1
 
+    # Rozděleno na kratší kousky
     vol_units = {
-        r"^(hrnku|hrnek|hrnky|hrnků|cup)\b": 240, r"^(lžička|lžičky|lžičku|lžiček|čl|č\.l\.)\b": 5,
-        r"^(lžíce|lžíci|lžic|pl|p\.l\.|polévková lžíce|polévkové l
+        r"^(hrnku|hrnek|hrnky|hrnků|cup)\b": 240, 
+        r"^(lžička|lžičky|lžičku|lžiček|čl|č\.l\.)\b": 5,
+        r"^(lžíce|lžíci|lžic|pl|p\.l\.|polévková lžíce|polévkové lžíce)\b": 15,
+        r"^(l|litr|litru|litrů|litry)\b": 1000, 
+        r"^(dl|decilitr|decilitrů)\b": 100,
+        r"^(ml|mililitr|mililitrů)\b": 1
+    }
+    
+    mass_units = {
+        r"^(kg|kilo|kila|kilogram|kilogramů)\b": 1000, 
+        r"^(dkg|deka)\b": 10,
+        r"^(g|gram|gramů|gramy)\b": 1
+    }
+    
+    for pat, mult in vol_units.items():
+        match = re.search(pat, rest_lower)
+        if match:
+            unit_matched = match.group(0); coef = mult; is_vol = True
+            break
+            
+    if not unit_matched:
+        for pat, mult in mass_units.items():
+            match = re.search(pat, rest_lower)
+            if match:
+                unit_matched = match.group(0); coef = mult; is_vol = False
+                break
+                
+    if not unit_matched: return f"{fmt(val)} {rest}"
+    
+    name = rest[len(unit_matched):].strip()
+    name_lower = name.lower()
+    
+    if is_vol:
+        dens = 1.0
+        if "mouk" in name_lower: dens = 0.55
+        elif "cukr" in name_lower: dens = 0.85
+        elif "olej" in name_lower: dens = 0.92
+        elif "másl" in name_lower or "masl" in name_lower: dens = 0.95
+        elif "sád" in name_lower or "sad" in name_lower: dens = 0.95
+        elif "med" in name_lower: dens = 1.42
+        elif "kakao" in name_lower or "kakaa" in name_lower: dens = 0.4
+        elif "mlék" in name_lower or "mlek" in name_lower: dens = 1.03
+        elif "smetan" in name_lower: dens = 1.02
+        elif "vloč" in name_lower: dens = 0.4
+        elif "rýž" in name_lower or "ryz" in name_lower: dens = 0.85
+        elif "mák" in name_lower or "mak" in name_lower: dens = 0.65
+        elif "ořech" in name_lower or "orech" in name_lower: dens = 0.6
+
+        final_g = val * coef * dens
+        return f"{fmt(final_g)} g {name} (původně: {line})"
+    else:
+        final_g = val * coef
+        if coef == 1 and multiplier == 1.0: 
+            return f"{fmt(final_g)} g {name}"
+        else:
+            return f"{fmt(final_g)} g {name} (původně: {line})"
+
+def convert_text(t, multiplier=1.0):
+    return "\n".join(convert_line(l, multiplier) for l in str(t).splitlines() if l.strip())
+
+# ---------- ACTION HANDLERS ----------
+def toggle_fav(recipe):
+    recipe["fav"] = not recipe.get("fav", False)
+    api_update(recipe["id"], {"fav": recipe["fav"]})
+def delete_recipe(recipe):
+    st.session_state.recipes.remove(recipe)
+    api_delete(recipe["id"])
+
+# ---------- NEW RECIPE FORM (AI ENHANCED) ----------
+if st.session_state.show_new:
+    st.markdown("### 📝 Nový recept")
+    ai_ready = "gemini_api_key" in st.secrets
+    if ai_ready:
+        genai.configure(api_key=st.secrets["gemini_api_key"])
+        ai_model = genai.GenerativeModel('gemini-2.5-flash')
+    
+    system_prompt = """Jsi expert na extrakci receptů a výživu. Z textu nebo obrázku vytáhni recept.
+    Vrať POUZE validní JSON formát s těmito klíči:
+    "name" (text),
+    "type" ("slané" nebo "sladké"),
+    "portions" (číslo),
+    "ingredients" (text, řádky oddělené \n),
+    "steps" (text, řádky oddělené \n),
+    "calories" (celé číslo na 1 porci),
+    "protein" (celé číslo na 1 porci),
+    "carbs" (celé číslo na 1 porci),
+    "fat" (celé číslo na 1 porci)."""
+
+    def process_ai_response(response_text):
+        try:
+            match = re.search(r'(\{.*\})|(\[.*\])', response_text, re.DOTALL)
+            if not match:
+                st.error("AI nevrátila data ve správném formátu.")
+                return None
+            
+            clean_text = match.group(0)
+            data = json.loads(clean_text, strict=False)
+            
+            if isinstance(data, list):
+                if len(data) > 0: data = data[0]
+                else: return None
+            
+            for key in ["name", "type", "ingredients", "steps"]:
+                val = data.get(key)
+                if isinstance(val, list):
+                    data[key] = "\n".join(str(x) for x in val)
+                elif val is None:
+                    data[key] = ""
+                else:
+                    data[key] = str(val).strip()
+
+            return data
+        except Exception as e:
+            st.error(f"Nepodařilo se zpracovat odpověď od AI: {e}")
+            with st.expander("Zobrazit raw odpověď AI (pro ladění)"):
+                st.code(response_text)
+            return None
+
+    tab1, tab2, tab3 = st.tabs(["✍️ Ručně", "🔗 Z odkazu", "📸 Z fotky"])
+
+    with tab1:
+        with st.form("new_recipe_form_manual", clear_on_submit=True):
+            n = st.text_input("Název")
+            typ = st.radio("Typ", ["slané", "sladké"], horizontal=True)
+            por = st.number_input("Porce", 1, 100, 4)
+            st.markdown("**Nutriční hodnoty na 1 porci:**")
+            m_col1, m_col2, m_col3, m_col4 = st.columns(4)
+            cal_in = m_col1.number_input("Kcal", 0, 10000, 0)
+            pro_in = m_col2.number_input("Bílkoviny", 0, 5000, 0)
+            car_in = m_col3.number_input("Sacharidy", 0, 5000, 0)
+            fat_in = m_col4.number_input("Tuky", 0, 5000, 0)
+            ing = st.text_area("Ingredience (co řádek, to položka)")
+            steps = st.text_area("Postup")
+            
+            if st.form_submit_button("✅ Uložit recept"):
+                if not ing:
+                    st.warning("Musíš vyplnit alespoň ingredience!")
+                else:
+                    new_r = {
+                        "id": new_id(), "name": n or "Bez názvu", "type": typ,
+                        "portions": por, "ingredients": ing, "steps": steps, "fav": False,
+                        "calories": cal_in, "protein": pro_in, "carbs": car_in, "fat": fat_in
+                    }
+                    st.session_state.recipes.insert(0, new_r)
+                    api_add(new_r)
+                    st.session_state.show_new = False
+                    st.rerun()
+
+    with tab2:
+        if not ai_ready: st.warning("Nastav 'gemini_api_key' v Secrets.")
+        else:
+            url_input = st.text_input("Vlož URL adresu receptu:")
+            if st.button("🪄 Vytěžit recept z webu"):
+                if url_input:
+                    with st.spinner("Pracuji na tom (počítám i kalorie)..."):
+                        try:
+                            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+                            res = requests.get(url_input, headers=headers, timeout=10)
+                            soup = BeautifulSoup(res.content, 'html.parser')
+                            raw_text = soup.get_text(separator='\n', strip=True)
+                            response = ai_model.generate_content(
+                                f"{system_prompt}\n\nZde je text z webu:\n{raw_text}",
+                                generation_config={"response_mime_type": "application/json"}
+                            )
+                            parsed_data = process_ai_response(response.text)
+                            if parsed_data:
+                                parsed_data["id"] = new_id()
+                                parsed_data["fav"] = False
+                                st.session_state.recipes.insert(0, parsed_data)
+                                api_add(parsed_data)
+                                st.session_state.show_new = False
+                                st.rerun()
+                        except Exception as e: st.error(f"Chyba při stahování: {e}")
+
+    with tab3:
+        if not ai_ready: st.warning("Nastav 'gemini_api_key' v Secrets.")
+        else:
+            uploaded_file = st.file_uploader("Nahrát obrázek", type=["png", "jpg", "jpeg", "webp", "heic", "heif"])
+            if uploaded_file and st.button("🪄 Přečíst z obrázku"):
+                with st.spinner("AI studuje obrázek a odhaduje makra..."):
+                    try:
+                        img = Image.open(uploaded_file)
+                        img.thumbnail((1500, 1500)) 
+                        response = ai_model.generate_content(
+                            [system_prompt, img],
+                            generation_config={"response_mime_type": "application/json"}
+                        )
+                        parsed_data = process_ai_response(response.text)
+                        if parsed_data:
+                            parsed_data["id"] = new_id()
+                            parsed_data["fav"] = False
+                            st.session_state.recipes.insert(0, parsed_data)
+                            api_add(parsed_data)
+                            st.session_state.show_new = False
+                            st.rerun()
+                    except Exception as e: st.error(f"Chyba při čtení obrázku: {e}")
+
+# ---------- SORT ----------
+recipes_sorted = sorted(st.session_state.recipes, key=lambda x: (not x.get("fav", False), str(x.get("name", ""))))
+
+# ---------- DISPLAY ----------
+for r in recipes_sorted:
+    text = (str(r.get("name","")) + str(r.get("ingredients","")) + str(r.get("type",""))).lower()
+    
+    if search and search not in text: continue
+    if filter_type != "Vše":
+        if str(r.get("type", "")).lower() != filter_type.lower(): continue
+
+    title = ("⭐ " + str(r.get("name", ""))) if r.get("fav") else str(r.get("name", ""))
+
+    with st.expander(title):
+        edit_key = f"edit_{r['id']}"
+        if edit_key not in st.session_state: st.session_state[edit_key] = False
+
+        if st.session_state[edit_key]:
+            with st.form(f"form_{r['id']}"):
+                en = st.text_input("Název", str(r.get("name", "")))
+                et = st.radio("Typ", ["sladké", "slané"], index=0 if str(r.get("type"))=="sladké" else 1)
+                
+                # Bezpečnostní ošetření načítání hodnot z databáze
+                safe_portions = max(1, min(100, int(r.get("portions", 4))))
+                ep = st.number_input("Porce", 1, 100, safe_portions)
+                
+                st.markdown("**Nutriční hodnoty (na 1 porci):**")
+                ec1, ec2, ec3, ec4 = st.columns(4)
+                
+                safe_kcal = max(0, min(10000, int(r.get("calories", 0))))
+                safe_pro = max(0, min(5000, int(r.get("protein", 0))))
+                safe_car = max(0, min(5000, int(r.get("carbs", 0))))
+                safe_fat = max(0, min(5000, int(r.get("fat", 0))))
+
+                ecal = ec1.number_input("Kcal", 0, 10000, safe_kcal)
+                epro = ec2.number_input("Bílkoviny", 0, 5000, safe_pro)
+                ecar = ec3.number_input("Sacharidy", 0, 5000, safe_car)
+                efat = ec4.number_input("Tuky", 0, 5000, safe_fat)
+                
+                ei = st.text_area("Ingredience", str(r.get("ingredients", "")))
+                es = st.text_area("Postup", str(r.get("steps", "")))
+
+                if st.form_submit_button("💾 Uložit"):
+                    r.update({"name": en, "type": et, "portions": ep, "ingredients": ei, "steps": es,
+                              "calories": ecal, "protein": epro, "carbs": ecar, "fat": efat})
+                    api_update(r["id"], r)
+                    st.session_state[edit_key] = False
+                    st.rerun()
+                    
+            if st.button("❌ Zrušit", key=f"cancel_{r['id']}"):
+                st.session_state[edit_key] = False
+                st.rerun()
+
+        else:
+            orig_portions = max(1, int(r.get("portions", 4)))
+            
+            kcal = int(r.get("calories", 0))
+            pro = int(r.get("protein", 0))
+            car = int(r.get("carbs", 0))
+            fat = int(r.get("fat", 0))
+            
+            if kcal > 0 or pro > 0 or car > 0 or fat > 0:
+                st.markdown(f"<div class='macros'><b>📊 Hodnoty na 1 porci:</b> 🔥 {kcal} kcal | 🥩 Bílkoviny: {pro} g | 🍞 Sacharidy: {car} g | 🧈 Tuky: {fat} g</div>", unsafe_allow_html=True)
+
+            c_port, _ = st.columns([2, 3])
+            with c_port:
+                safe_target = max(1, min(100, orig_portions))
+                target_portions = st.number_input("👩‍🍳 Pro kolik lidí vaříš?", min_value=1, max_value=100, value=safe_target, key=f"port_{r['id']}")
+            multiplier = target_portions / orig_portions
+
+            # --- VYCHYTÁVKA: INTERAKTIVNÍ ODŠKRTÁVÁNÍ INGREDIENCÍ ---
+            st.markdown("**Ingredience:**")
+            ing_lines = convert_text(str(r.get("ingredients", "")), multiplier).splitlines()
+            for idx, l in enumerate(ing_lines):
+                if l.strip():
+                    # Odstraníme případnou odrážku, aby popisek vypadal čistě
+                    clean_l = l.strip().lstrip("•").strip()
+                    st.checkbox(clean_l, key=f"chk_ing_{r['id']}_{idx}")
+            st.write("") # Malá mezera
+
+            # --- VYCHYTÁVKA: INTERAKTIVNÍ ODŠKRTÁVÁNÍ KROKŮ POSTUPU ---
+            st.markdown("**Postup:**")
+            step_lines = str(r.get("steps", "")).splitlines()
+            for idx, l in enumerate(step_lines):
+                if l.strip():
+                    st.checkbox(l.strip(), key=f"chk_step_{r['id']}_{idx}")
+            st.write("")
+
+            export_text = f"🍳 {str(r.get('name', '')).upper()}\n"
+            if kcal > 0: export_text += f"📊 1 porce: {kcal} kcal | {pro}g B | {car}g S | {fat}g T\n"
+            export_text += f"🥘 Porce: {target_portions}\n\n🛒 Ingredience:\n"
+            for l in convert_text(str(r.get("ingredients", "")), multiplier).splitlines():
+                export_text += f"• {l}\n"
+            export_text += "\n👨‍🍳 Postup:\n"
+            for l in str(r.get("steps", "")).splitlines():
+                if l.strip(): export_text += f"{l}\n"
+
+            with st.expander("📤 Sdílet / Kopírovat recept"):
+                st.info("Kliknutím na ikonu v pravém horním rohu rámečku zkopíruješ text.")
+                st.code(export_text, language="markdown")
+
+            st.divider()
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                fav_label = "Odstranit z oblíbených" if r.get("fav") else "⭐ Přidat do oblíbených"
+                if st.button(fav_label, key=r["id"]+"f"):
+                    toggle_fav(r)
+                    st.rerun()
+            with c2:
+                if st.button("✏️ Upravit", key=r["id"]+"e"):
+                    st.session_state[edit_key] = True
+                    st.rerun()
+            with c3:
+                if st.button("🗑 Smazat", key=r["id"]+"d"):
+                    delete_recipe(r)
+                    st.rerun()
