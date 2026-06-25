@@ -399,7 +399,6 @@ for r in recipes_sorted:
                 en = st.text_input("Název", str(r.get("name", "")))
                 et = st.radio("Typ", ["sladké", "slané"], index=0 if str(r.get("type"))=="sladké" else 1)
                 
-                # Bezpečnostní ošetření načítání hodnot z databáze
                 safe_portions = max(1, min(100, int(r.get("portions", 4))))
                 ep = st.number_input("Porce", 1, 100, safe_portions)
                 
@@ -447,18 +446,25 @@ for r in recipes_sorted:
                 target_portions = st.number_input("👩‍🍳 Pro kolik lidí vaříš?", min_value=1, max_value=100, value=safe_target, key=f"port_{r['id']}")
             multiplier = target_portions / orig_portions
 
+            # --- VYCHYTÁVKA: INTERAKTIVNÍ ODŠKRTÁVÁNÍ INGREDIENCÍ ---
             st.markdown("**Ingredience:**")
-            html = "<div class='ingredients'>"
-            for l in convert_text(str(r.get("ingredients", "")), multiplier).splitlines():
-                html += f"<p>• {l}</p>"
-            html += "</div><br>"
-            st.markdown(html, unsafe_allow_html=True)
+            ing_lines = convert_text(str(r.get("ingredients", "")), multiplier).splitlines()
+            for idx, l in enumerate(ing_lines):
+                if l.strip():
+                    # Odstraníme případnou odrážku, aby popisek vypadal čistě
+                    clean_l = l.strip().lstrip("•").strip()
+                    st.checkbox(clean_l, key=f"chk_ing_{r['id']}_{idx}")
+            st.write("") # Malá mezera
 
+            # --- VYCHYTÁVKA: INTERAKTIVNÍ ODŠKRTÁVÁNÍ KROKŮ POSTUPU ---
             st.markdown("**Postup:**")
-            for l in str(r.get("steps", "")).splitlines():
-                if l.strip(): st.markdown(l)
+            step_lines = str(r.get("steps", "")).splitlines()
+            for idx, l in enumerate(step_lines):
+                if l.strip():
+                    st.checkbox(l.strip(), key=f"chk_step_{r['id']}_{idx}")
+            st.write("")
 
-            export_text = f"🍳 {str(r.get('name', '')).upper()}\n"
+            export_text = f"🍳 {str(r.get('name', ''))).upper()}\n"
             if kcal > 0: export_text += f"📊 1 porce: {kcal} kcal | {pro}g B | {car}g S | {fat}g T\n"
             export_text += f"🥘 Porce: {target_portions}\n\n🛒 Ingredience:\n"
             for l in convert_text(str(r.get("ingredients", "")), multiplier).splitlines():
