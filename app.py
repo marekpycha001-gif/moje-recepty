@@ -110,6 +110,7 @@ def api_delete(recipe_id):
 if "recipes" not in st.session_state: st.session_state.recipes = load_db()
 if "show_new" not in st.session_state: st.session_state.show_new = False
 if "show_search" not in st.session_state: st.session_state.show_search = False
+if "active_category" not in st.session_state: st.session_state.active_category = None
 
 # ---------- STYLE ----------
 st.markdown("""
@@ -148,6 +149,34 @@ with c3:
 st.markdown("</div>", unsafe_allow_html=True)
 st.markdown('<div class="title">Márova kuchařka</div>', unsafe_allow_html=True)
 
+# ---------- HLAVNÍ ROZCESTNÍK ----------
+if not st.session_state.show_search and not st.session_state.show_new:
+    if st.session_state.active_category is None:
+        st.markdown("<h3 style='text-align: center; padding: 20px 0;'>Na co máš dneska chuť?</h3>", unsafe_allow_html=True)
+        rc1, rc2 = st.columns(2)
+        with rc1:
+            if st.button("🧂 Slané", use_container_width=True):
+                st.session_state.active_category = "slané"
+                st.rerun()
+        with rc2:
+            if st.button("🍰 Sladké", use_container_width=True):
+                st.session_state.active_category = "sladké"
+                st.rerun()
+        
+        st.write("")
+        if st.button("📖 Zobrazit všechny recepty", use_container_width=True):
+            st.session_state.active_category = "vše"
+            st.rerun()
+            
+        st.stop()  # Aplikace zde zastaví vykreslování, aby neukázala celý seznam
+    else:
+        cat_label = "Slané" if st.session_state.active_category == "slané" else ("Sladké" if st.session_state.active_category == "sladké" else "Všechny recepty")
+        st.markdown(f"<div style='text-align: center; margin-bottom: 15px;'><b>Kategorie: {cat_label}</b></div>", unsafe_allow_html=True)
+        if st.button("🔙 Zpět na výběr kategorií", use_container_width=True):
+            st.session_state.active_category = None
+            st.rerun()
+        st.divider()
+
 # ---------- SEARCH & FILTER ----------
 search = ""
 filter_type = "Vše"
@@ -175,13 +204,7 @@ def convert_line(line, multiplier=1.0):
     def fmt(v): return int(v) if v == int(v) else round(v, 1)
 
     rest_lower = rest.lower()
-    
-    # Rozděleno na kratší kousky
-    ignore_patterns = [
-        "ks", "kus", "kusů", "kusy", "vejce", "špetka", 
-        "špetku", "špetky", "trochu", "balení", "bal", 
-        "plechovka", "plechovky"
-    ]
+    ignore_patterns = ["ks", "kus", "kusů", "kusy", "vejce", "špetka", "špetku", "špetky", "trochu", "balení", "bal", "plechovka", "plechovky"]
     for ig in ignore_patterns:
         if rest_lower.startswith(ig): return f"{fmt(val)} {ig} {rest[len(ig):].strip()}"
             
@@ -189,19 +212,14 @@ def convert_line(line, multiplier=1.0):
     unit_matched = ""
     coef = 1
 
-    # Rozděleno na kratší kousky
     vol_units = {
-        r"^(hrnku|hrnek|hrnky|hrnků|cup)\b": 240, 
-        r"^(lžička|lžičky|lžičku|lžiček|čl|č\.l\.)\b": 5,
+        r"^(hrnku|hrnek|hrnky|hrnků|cup)\b": 240, r"^(lžička|lžičky|lžičku|lžiček|čl|č\.l\.)\b": 5,
         r"^(lžíce|lžíci|lžic|pl|p\.l\.|polévková lžíce|polévkové lžíce)\b": 15,
-        r"^(l|litr|litru|litrů|litry)\b": 1000, 
-        r"^(dl|decilitr|decilitrů)\b": 100,
+        r"^(l|litr|litru|litrů|litry)\b": 1000, r"^(dl|decilitr|decilitrů)\b": 100,
         r"^(ml|mililitr|mililitrů)\b": 1
     }
-    
     mass_units = {
-        r"^(kg|kilo|kila|kilogram|kilogramů)\b": 1000, 
-        r"^(dkg|deka)\b": 10,
+        r"^(kg|kilo|kila|kilogram|kilogramů)\b": 1000, r"^(dkg|deka)\b": 10,
         r"^(g|gram|gramů|gramy)\b": 1
     }
     
@@ -399,6 +417,11 @@ for r in recipes_sorted:
     if filter_type != "Vše":
         if str(r.get("type", "")).lower() != filter_type.lower(): continue
 
+    # Filtrování podle hlavního menu (pokud se zrovna nehledá)
+    if not st.session_state.show_search and st.session_state.active_category in ["slané", "sladké"]:
+        if str(r.get("type", "")).lower() != st.session_state.active_category:
+            continue
+
     title = ("⭐ " + str(r.get("name", ""))) if r.get("fav") else str(r.get("name", ""))
 
     with st.expander(title):
@@ -410,7 +433,6 @@ for r in recipes_sorted:
                 en = st.text_input("Název", str(r.get("name", "")))
                 et = st.radio("Typ", ["sladké", "slané"], index=0 if str(r.get("type"))=="sladké" else 1)
                 
-                # Bezpečnostní ošetření načítání hodnot z databáze
                 safe_portions = max(1, min(100, int(r.get("portions", 4))))
                 ep = st.number_input("Porce", 1, 100, safe_portions)
                 
@@ -458,17 +480,14 @@ for r in recipes_sorted:
                 target_portions = st.number_input("👩‍🍳 Pro kolik lidí vaříš?", min_value=1, max_value=100, value=safe_target, key=f"port_{r['id']}")
             multiplier = target_portions / orig_portions
 
-            # --- VYCHYTÁVKA: INTERAKTIVNÍ ODŠKRTÁVÁNÍ INGREDIENCÍ ---
             st.markdown("**Ingredience:**")
             ing_lines = convert_text(str(r.get("ingredients", "")), multiplier).splitlines()
             for idx, l in enumerate(ing_lines):
                 if l.strip():
-                    # Odstraníme případnou odrážku, aby popisek vypadal čistě
                     clean_l = l.strip().lstrip("•").strip()
                     st.checkbox(clean_l, key=f"chk_ing_{r['id']}_{idx}")
-            st.write("") # Malá mezera
+            st.write("") 
 
-            # --- VYCHYTÁVKA: INTERAKTIVNÍ ODŠKRTÁVÁNÍ KROKŮ POSTUPU ---
             st.markdown("**Postup:**")
             step_lines = str(r.get("steps", "")).splitlines()
             for idx, l in enumerate(step_lines):
